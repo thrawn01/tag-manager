@@ -161,25 +161,39 @@ func TestMCPServerCapabilities(t *testing.T) {
 			t.Fatalf("Failed to list tools: %v", err)
 		}
 
-		// Verify that our list_all_tags tool is available
-		found := false
+		// Verify all expected tools are available with correct descriptions
+		expectedTools := map[string]string{
+			"find_files_by_tags":  "Find files containing specific tags",
+			"get_tags_info":       "Get detailed information about specific tags including file lists",
+			"list_all_tags":       "List all tags with usage statistics and optional filtering",
+			"replace_tags_batch":  "Replace/rename tags across multiple files with batch operation",
+			"get_untagged_files":  "Find files that don't have any tags",
+			"validate_tags":       "Validate tag syntax and get suggestions for invalid tags",
+			"get_files_tags":      "Get all tags associated with specific files",
+		}
+
+		foundTools := make(map[string]bool)
 		for _, tool := range tools.Tools {
-			if tool.Name == "list_all_tags" {
-				found = true
-				if tool.Description != "List all tags with usage statistics" {
-					t.Errorf("Expected tool description 'List all tags with usage statistics', got '%s'", tool.Description)
+			if expectedDesc, expected := expectedTools[tool.Name]; expected {
+				foundTools[tool.Name] = true
+				if tool.Description != expectedDesc {
+					t.Errorf("Tool %s: expected description '%s', got '%s'", tool.Name, expectedDesc, tool.Description)
 				}
-				break
+			} else {
+				t.Errorf("Unexpected tool found: %s", tool.Name)
 			}
 		}
 
-		if !found {
-			t.Error("Expected 'list_all_tags' tool to be available, but it was not found")
+		// Check that all expected tools were found
+		for toolName := range expectedTools {
+			if !foundTools[toolName] {
+				t.Errorf("Expected tool '%s' was not found", toolName)
+			}
 		}
 
-		// Verify we have at least one tool
-		if len(tools.Tools) == 0 {
-			t.Error("Expected at least one tool to be available")
+		// Verify we have exactly 7 tools
+		if len(tools.Tools) != 7 {
+			t.Errorf("Expected exactly 7 tools, got %d", len(tools.Tools))
 		}
 
 		t.Logf("Successfully discovered %d tools from MCP server", len(tools.Tools))
