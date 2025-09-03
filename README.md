@@ -1,5 +1,10 @@
 # Obsidian Tag Manager
 
+[![Test](https://github.com/thrawn01/tag-manager/actions/workflows/test.yml/badge.svg)](https://github.com/thrawn01/tag-manager/actions/workflows/test.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/thrawn01/tag-manager)](https://goreportcard.com/report/github.com/thrawn01/tag-manager)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/thrawn01/tag-manager)](https://github.com/thrawn01/tag-manager)
+[![License](https://img.shields.io/github/license/thrawn01/tag-manager)](https://github.com/thrawn01/tag-manager/blob/main/LICENSE)
+
 A powerful CLI tool and MCP server for managing tags in Obsidian vaults. Provides Claude Code with precise tag
 management capabilities while also offering a comprehensive command-line interface for direct use.
 
