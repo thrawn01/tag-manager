@@ -28,7 +28,7 @@ func TestFilesystemScanner_ExtractTags(t *testing.T) {
 			expected: []string{"golang", "programming"},
 		},
 		{
-			name:     "YAMLArrayTags", 
+			name:     "YAMLArrayTags",
 			content:  "---\ntags: [\"golang\", \"programming\", \"tutorial\"]\n---\nContent here",
 			expected: []string{"golang", "programming", "tutorial"},
 		},
@@ -82,7 +82,7 @@ This has #hashtag and #more-tags in the content.`,
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tags := scanner.ExtractTags(test.content)
-			
+
 			if len(tags) != len(test.expected) {
 				t.Errorf("Expected %d tags, got %d: %v", len(test.expected), len(tags), tags)
 				return
@@ -106,11 +106,11 @@ func TestFilesystemScanner_ScanDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
 	testFiles := map[string]string{
-		"file1.md":         "# File 1\n#golang #programming",
-		"file2.md":         "# File 2\n#python #data-science",
-		"untagged.md":      "# Untagged\nNo tags here",
+		"file1.md":           "# File 1\n#golang #programming",
+		"file2.md":           "# File 2\n#python #data-science",
+		"untagged.md":        "# Untagged\nNo tags here",
 		"file.excalidraw.md": "# Excalidraw\n#diagram",
-		"subdir/file3.md":  "# File 3\n#javascript",
+		"subdir/file3.md":    "# File 3\n#javascript",
 		"100 Archive/old.md": "# Old\n#archived",
 	}
 
@@ -142,18 +142,18 @@ func TestFilesystemScanner_ScanDirectory(t *testing.T) {
 	}
 
 	expectedFiles := []string{"file1.md", "file2.md", "untagged.md", "subdir/file3.md"}
-	
+
 	if len(results) != len(expectedFiles) {
 		t.Errorf("Expected %d files, got %d", len(expectedFiles), len(results))
 	}
 
 	for _, result := range results {
 		relPath, _ := filepath.Rel(tempDir, result.Path)
-		
+
 		if strings.Contains(relPath, "excalidraw") {
 			t.Errorf("Excalidraw file should be excluded: %s", relPath)
 		}
-		
+
 		if strings.Contains(relPath, "100 Archive") {
 			t.Errorf("Archive file should be excluded: %s", relPath)
 		}

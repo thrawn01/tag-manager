@@ -1,6 +1,6 @@
 # Makefile for Obsidian Tag Manager
 
-.PHONY: build test clean install run-tests lint fmt help
+.PHONY: build test clean install run-tests lint fmt help tidy
 
 # Build the binary
 build:
@@ -31,6 +31,13 @@ fmt:
 # Lint code (requires golangci-lint)
 lint:
 	golangci-lint run
+
+tidy:
+	go mod tidy && git diff --exit-code
+
+ci: tidy fmt lint
+	@echo
+	@echo "\033[32mEVERYTHING PASSED!\033[0m"
 
 # Create test data for manual testing
 test-data:

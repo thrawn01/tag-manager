@@ -19,10 +19,10 @@ func TestTagManagerE2E(t *testing.T) {
 	}
 
 	testFiles := map[string]string{
-		"golang.md":    "# Go Tutorial\n#golang #programming #tutorial",
-		"python.md":    "# Python Guide\n#python #programming #data-science",
+		"golang.md":     "# Go Tutorial\n#golang #programming #tutorial",
+		"python.md":     "# Python Guide\n#python #programming #data-science",
 		"javascript.md": "# JS Basics\n#javascript #web-development #programming",
-		"untagged.md":  "# No Tags\nThis file has no tags",
+		"untagged.md":   "# No Tags\nThis file has no tags",
 		"mixed.md": `---
 tags: ["yaml-tag", "frontend"]
 ---
@@ -183,9 +183,9 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 	}
 
 	testFiles := map[string]string{
-		"success.md":    "#old-tag content",
-		"readonly.md":   "#old-tag content",
-		"another.md":    "#old-tag content",
+		"success.md":  "#old-tag content",
+		"readonly.md": "#old-tag content",
+		"another.md":  "#old-tag content",
 	}
 
 	for path, content := range testFiles {
@@ -199,7 +199,9 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 	if err := os.Chmod(readonlyPath, 0444); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(readonlyPath, 0644)
+	defer func() {
+		_ = os.Chmod(readonlyPath, 0644)
+	}()
 
 	replacements := []tagmanager.TagReplacement{
 		{OldTag: "old-tag", NewTag: "new-tag"},

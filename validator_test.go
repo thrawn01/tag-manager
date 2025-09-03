@@ -182,7 +182,7 @@ func TestDefaultValidator_ValidatePath(t *testing.T) {
 			expectError: false, // filepath.Clean resolves this to "/traversal" which is valid
 		},
 		{
-			name:        "PathWithMultipleTraversal", 
+			name:        "PathWithMultipleTraversal",
 			path:        "/path/../../traversal",
 			expectError: false, // filepath.Clean resolves this to "/traversal" which is valid
 		},
@@ -245,39 +245,39 @@ func TestDefaultValidator_ValidateConfig(t *testing.T) {
 		{
 			name: "EmptyHashtagPattern",
 			config: &tagmanager.Config{
-				MinTagLength:    3,
-				MaxDigitRatio:   0.5,
-				HashtagPattern:  "",
+				MinTagLength:   3,
+				MaxDigitRatio:  0.5,
+				HashtagPattern: "",
 			},
 			expectError: true,
 		},
 		{
 			name: "InvalidHashtagPattern",
 			config: &tagmanager.Config{
-				MinTagLength:    3,
-				MaxDigitRatio:   0.5,
-				HashtagPattern:  "[invalid",
+				MinTagLength:   3,
+				MaxDigitRatio:  0.5,
+				HashtagPattern: "[invalid",
 			},
 			expectError: true,
 		},
 		{
 			name: "InvalidYAMLTagPattern",
 			config: &tagmanager.Config{
-				MinTagLength:    3,
-				MaxDigitRatio:   0.5,
-				HashtagPattern:  `#[a-zA-Z][\w\-]*`,
-				YAMLTagPattern:  "[invalid",
+				MinTagLength:   3,
+				MaxDigitRatio:  0.5,
+				HashtagPattern: `#[a-zA-Z][\w\-]*`,
+				YAMLTagPattern: "[invalid",
 			},
 			expectError: true,
 		},
 		{
 			name: "InvalidYAMLListPattern",
 			config: &tagmanager.Config{
-				MinTagLength:     3,
-				MaxDigitRatio:    0.5,
-				HashtagPattern:   `#[a-zA-Z][\w\-]*`,
-				YAMLTagPattern:   `(?m)^tags:\s*\[([^\]]+)\]`,
-				YAMLListPattern:  "[invalid",
+				MinTagLength:    3,
+				MaxDigitRatio:   0.5,
+				HashtagPattern:  `#[a-zA-Z][\w\-]*`,
+				YAMLTagPattern:  `(?m)^tags:\s*\[([^\]]+)\]`,
+				YAMLListPattern: "[invalid",
 			},
 			expectError: true,
 		},
@@ -322,8 +322,8 @@ func TestDefaultValidator_WithInvalidRegexConfig(t *testing.T) {
 	// Should have an issue about invalid regex
 	found := false
 	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "regex") || 
-		   strings.Contains(strings.ToLower(issue), "configuration") {
+		if strings.Contains(strings.ToLower(issue), "regex") ||
+			strings.Contains(strings.ToLower(issue), "configuration") {
 			found = true
 			break
 		}

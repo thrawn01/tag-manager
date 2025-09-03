@@ -32,12 +32,12 @@ func NewFilesystemScanner(config *Config) (*FilesystemScanner, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid hashtag pattern: %w", err)
 	}
-	
+
 	yamlTagPattern, err := regexp.Compile(config.YAMLTagPattern)
 	if err != nil {
 		return nil, fmt.Errorf("invalid YAML tag pattern: %w", err)
 	}
-	
+
 	yamlTagListPattern, err := regexp.Compile(config.YAMLListPattern)
 	if err != nil {
 		return nil, fmt.Errorf("invalid YAML list pattern: %w", err)
@@ -54,8 +54,8 @@ func NewFilesystemScanner(config *Config) (*FilesystemScanner, error) {
 func (s *FilesystemScanner) ScanDirectory(ctx context.Context, rootPath string, excludePaths []string) iter.Seq2[FileTagInfo, error] {
 	return func(yield func(FileTagInfo, error) bool) {
 		allExcludes := append(s.config.ExcludeDirs, excludePaths...)
-		
-		filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
+
+		if err := filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -95,7 +95,9 @@ func (s *FilesystemScanner) ScanDirectory(ctx context.Context, rootPath string, 
 				return fmt.Errorf("scan terminated by consumer")
 			}
 			return nil
-		})
+		}); err != nil {
+			yield(FileTagInfo{}, err)
+		}
 	}
 }
 
@@ -114,7 +116,7 @@ func (s *FilesystemScanner) ScanFile(ctx context.Context, filePath string) (File
 
 func (s *FilesystemScanner) ExtractTags(content string) []string {
 	tagMap := make(map[string]bool)
-	
+
 	hashtagMatches := s.hashtagPattern.FindAllString(content, -1)
 	for _, match := range hashtagMatches {
 		tag := strings.TrimPrefix(match, "#")
@@ -155,7 +157,7 @@ func (s *FilesystemScanner) ExtractTags(content string) []string {
 func (s *FilesystemScanner) ExtractTagsFromReader(ctx context.Context, reader io.Reader) []string {
 	scanner := bufio.NewScanner(reader)
 	var content strings.Builder
-	
+
 	for scanner.Scan() {
 		if ctx.Err() != nil {
 			return nil
@@ -163,7 +165,7 @@ func (s *FilesystemScanner) ExtractTagsFromReader(ctx context.Context, reader io
 		content.WriteString(scanner.Text())
 		content.WriteString("\n")
 	}
-	
+
 	return s.ExtractTags(content.String())
 }
 
@@ -197,11 +199,7 @@ func (s *FilesystemScanner) isValidTag(tag string) bool {
 		}
 	}
 	digitRatio := float64(digitCount) / float64(len(tag))
-	if digitRatio > s.config.MaxDigitRatio {
-		return false
-	}
-
-	return true
+	return digitRatio <= s.config.MaxDigitRatio
 }
 
 func (s *FilesystemScanner) isHexColor(tag string) bool {
@@ -209,7 +207,7 @@ func (s *FilesystemScanner) isHexColor(tag string) bool {
 		return false
 	}
 	for _, ch := range tag {
-		if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') && (ch < 'A' || ch > 'F') {
 			return false
 		}
 	}
@@ -220,13 +218,13 @@ func (s *FilesystemScanner) looksLikeID(tag string) bool {
 	if len(tag) < 8 {
 		return false
 	}
-	
+
 	hasUpperCase := false
 	hasLowerCase := false
 	hasDigit := false
 	consecutiveDigits := 0
 	maxConsecutive := 0
-	
+
 	for _, ch := range tag {
 		if ch >= 'A' && ch <= 'Z' {
 			hasUpperCase = true
@@ -244,15 +242,15 @@ func (s *FilesystemScanner) looksLikeID(tag string) bool {
 			consecutiveDigits = 0
 		}
 	}
-	
+
 	if maxConsecutive > 4 {
 		return true
 	}
-	
+
 	if hasUpperCase && hasLowerCase && hasDigit && len(tag) > 12 {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -261,14 +259,14 @@ func (s *FilesystemScanner) isURLFragment(tag string) bool {
 		"http", "https", "ftp", "www", ".com", ".org", ".net",
 		"localhost", "127.0.0.1", "::1",
 	}
-	
+
 	tagLower := strings.ToLower(tag)
 	for _, pattern := range urlPatterns {
 		if strings.Contains(tagLower, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -280,41 +278,41 @@ func (s *FilesystemScanner) checkHashtagBoundary(content string, hashtag string)
 		if index == -1 {
 			break
 		}
-		
+
 		absoluteIndex := start + index
-		
+
 		// Check character before hashtag
 		validBefore := true
 		if absoluteIndex > 0 {
 			prevChar := content[absoluteIndex-1]
 			// Don't allow @ before # (email case) or alphanumeric characters
-			if prevChar == '@' || 
-				(prevChar >= 'a' && prevChar <= 'z') || (prevChar >= 'A' && prevChar <= 'Z') || 
+			if prevChar == '@' ||
+				(prevChar >= 'a' && prevChar <= 'z') || (prevChar >= 'A' && prevChar <= 'Z') ||
 				(prevChar >= '0' && prevChar <= '9') || prevChar == '-' || prevChar == '_' {
 				validBefore = false
 			}
 		}
-		
+
 		// Check character after hashtag
 		validAfter := true
 		endIndex := absoluteIndex + len(hashtag)
 		if endIndex < len(content) {
 			nextChar := content[endIndex]
-			if (nextChar >= 'a' && nextChar <= 'z') || (nextChar >= 'A' && nextChar <= 'Z') || 
-			   (nextChar >= '0' && nextChar <= '9') || nextChar == '-' || nextChar == '_' {
+			if (nextChar >= 'a' && nextChar <= 'z') || (nextChar >= 'A' && nextChar <= 'Z') ||
+				(nextChar >= '0' && nextChar <= '9') || nextChar == '-' || nextChar == '_' {
 				validAfter = false
 			}
 		}
-		
+
 		// If this occurrence is valid, return true
 		if validBefore && validAfter {
 			return true
 		}
-		
+
 		// Move to next possible occurrence
 		start = absoluteIndex + 1
 	}
-	
+
 	// No valid occurrence found
 	return false
 }

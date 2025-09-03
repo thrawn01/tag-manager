@@ -31,9 +31,7 @@ func (v *DefaultValidator) ValidateTag(tag string) *ValidationResult {
 	}
 
 	cleanTag := strings.TrimSpace(tag)
-	if strings.HasPrefix(cleanTag, "#") {
-		cleanTag = strings.TrimPrefix(cleanTag, "#")
-	}
+	cleanTag = strings.TrimPrefix(cleanTag, "#")
 
 	if cleanTag == "" {
 		result.IsValid = false
@@ -58,7 +56,7 @@ func (v *DefaultValidator) ValidateTag(tag string) *ValidationResult {
 	if invalidChars.MatchString(cleanTag) {
 		result.IsValid = false
 		result.Issues = append(result.Issues, "Tag contains invalid characters (only letters, numbers, hyphens, and underscores allowed)")
-		
+
 		suggested := invalidChars.ReplaceAllString(cleanTag, "-")
 		suggested = regexp.MustCompile(`-+`).ReplaceAllString(suggested, "-")
 		suggested = strings.Trim(suggested, "-")
@@ -117,7 +115,7 @@ func (v *DefaultValidator) ValidateTag(tag string) *ValidationResult {
 	digitRatio := float64(digitCount) / float64(len(cleanTag))
 	if digitRatio > v.config.MaxDigitRatio {
 		result.IsValid = false
-		result.Issues = append(result.Issues, fmt.Sprintf("Tag contains too many digits (%.0f%% digits, max allowed: %.0f%%)", 
+		result.Issues = append(result.Issues, fmt.Sprintf("Tag contains too many digits (%.0f%% digits, max allowed: %.0f%%)",
 			digitRatio*100, v.config.MaxDigitRatio*100))
 		result.Suggestions = append(result.Suggestions, "Consider using more descriptive text instead of numbers")
 	}
