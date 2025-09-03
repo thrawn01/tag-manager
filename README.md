@@ -19,19 +19,18 @@ management capabilities while also offering a comprehensive command-line interfa
 ## Installation
 
 ```bash
-# Install directly from GitHub
 go install github.com/thrawn01/tag-manager/cmd/tag-manager@latest
-
-# Verify installation
-tag-manager --help
+```
+Verify installation
+```bash
+$ tag-manager --help
 ```
 
 ## Quick Start
 
 List all tags in your Obsidian vault
 ```bash
-cd /path/to/your/vault
-tag-manager list
+$ tag-manager list
 
 Found 652 tags:
   #daily-notes                    814 files
@@ -44,26 +43,25 @@ Found 652 tags:
 
 Find files with specific tags
 ```bash
-tag-manager find --tags="golang,programming" --root="/path/to/your/vault"
-tag-manager find --tags="golang,programming"
+$ tag-manager find --tags="golang,programming"
 
 #golang (6 files):
-  /Users/thrawn/Obsidian/Notes/Resources & Interests/Technology/Concepts/Programming/Language/Golang.md
-  /Users/thrawn/Obsidian/Notes/Resources & Interests/Technology/Concepts/Programming/Patterns/Logging Guide.md
-  /Users/thrawn/Obsidian/Notes/Resources & Interests/Technology/Language/Golang Trace Profile Example.md
-  /Users/thrawn/Obsidian/Notes/Resources & Interests/Technology/Latency.md
-  /Users/thrawn/Obsidian/Notes/Calendar Notes/2022/07 July/2022-07-25.md
+  Interests/Technology/Concepts/Programming/Language/Golang.md
+  Interests/Technology/Concepts/Programming/Patterns/Logging Guide.md
+  Interests/Technology/Language/Golang Trace Profile Example.md
+  Interests/Technology/Latency.md
+  Calendar Notes/2022/07 July/2022-07-25.md
 
 #programming (11 files):
-  /Users/thrawn/Obsidian/Notes/20 Projects/Writing/Published/Mastering HTTP REST Design.md
-  /Users/thrawn/Obsidian/Notes/30 Things/Education/Education.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Software Development.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Technology/Algorithms & Protocols/Binary Tree.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Technology/Algorithms & Protocols/Ring Buffer.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Technology/Concepts/Cognitive Load.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Technology/Concepts/Programming/Language/Golang.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Technology/Concepts/Programming/Patterns/Object Oriented Programming.md
-  /Users/thrawn/Obsidian/Notes/40 Resources & Interests/Technology/Latency.md
+  Projects/Writing/Published/Mastering HTTP REST Design.md
+  Things/Education/Education.md
+  Interests/Software Development.md
+  Interests/Technology/Algorithms and Protocols/Binary Tree.md
+  Interests/Technology/Algorithms and Protocols/Ring Buffer.md
+  Interests/Technology/Concepts/Cognitive Load.md
+  Interests/Technology/Programming/Language/Golang.md
+  Interests/Technology/Programming/Patterns/Object Oriented Programming.md
+  Interests/Technology/Latency.md
 -- snip --
 ```
 
@@ -184,9 +182,9 @@ find /Users/john/MyVault -name "*.md" -print0 | \
 | Option | Description | Example |
 |--------|-------------|---------|
 | `-h, --help` | Show help message | `tag-manager -h` |
-| `-v, --verbose` | Enable verbose output | `tag-manager -v list --root=~/vault` |
-| `--dry-run` | Preview changes without modifying files | `tag-manager --dry-run replace --old=test --new=testing --root=~/vault` |
-| `--config FILE` | Use custom configuration file | `tag-manager --config=custom.yaml list --root=~/vault` |
+| `-v, --verbose` | Enable verbose output | `tag-manager -v list` |
+| `--dry-run` | Preview changes without modifying files | `tag-manager --dry-run replace --old=test --new=testing` |
+| `--config FILE` | Use custom configuration file | `tag-manager --config=custom.yaml list` |
 
 ## Configuration
 
@@ -628,3 +626,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Built for the Obsidian community
 - Designed for Claude Code integration
 - Inspired by the need for intelligent tag management
+- Built by Claude Code (See tag-manager-plan.md)
