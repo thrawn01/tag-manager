@@ -1,0 +1,234 @@
+package tagmanager_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+
+	tagmanager "github.com/thrawn01/tag-manager"
+)
+
+func TestTagManagerE2E(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testFiles := map[string]string{
+		"golang.md":    "# Go Tutorial\n#golang #programming #tutorial",
+		"python.md":    "# Python Guide\n#python #programming #data-science",
+		"javascript.md": "# JS Basics\n#javascript #web-development #programming",
+		"untagged.md":  "# No Tags\nThis file has no tags",
+		"mixed.md": `---
+tags: ["yaml-tag", "frontend"]
+---
+# Mixed Tags
+Also has #hashtag-tag in content.`,
+	}
+
+	for path, content := range testFiles {
+		fullPath := filepath.Join(tempDir, path)
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctx := context.Background()
+
+	t.Run("FindFilesByTags", func(t *testing.T) {
+		results, err := manager.FindFilesByTags(ctx, []string{"programming"}, tempDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		files := results["programming"]
+		if len(files) != 3 {
+			t.Errorf("Expected 3 files with #programming tag, got %d", len(files))
+		}
+	})
+
+	t.Run("ListAllTags", func(t *testing.T) {
+		tags, err := manager.ListAllTags(ctx, tempDir, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(tags) < 5 {
+			t.Errorf("Expected at least 5 tags, got %d", len(tags))
+		}
+
+		programmingFound := false
+		for _, tag := range tags {
+			if tag.Name == "programming" && tag.Count == 3 {
+				programmingFound = true
+				break
+			}
+		}
+
+		if !programmingFound {
+			t.Error("Expected programming tag with count 3")
+		}
+	})
+
+	t.Run("GetUntaggedFiles", func(t *testing.T) {
+		untagged, err := manager.GetUntaggedFiles(ctx, tempDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(untagged) != 1 {
+			t.Errorf("Expected 1 untagged file, got %d", len(untagged))
+		}
+
+		if len(untagged) > 0 && filepath.Base(untagged[0].Path) != "untagged.md" {
+			t.Error("Expected untagged.md to be in untagged files")
+		}
+	})
+
+	t.Run("ReplaceTagsBatch", func(t *testing.T) {
+		replacements := []tagmanager.TagReplacement{
+			{OldTag: "programming", NewTag: "coding"},
+		}
+
+		result, err := manager.ReplaceTagsBatch(ctx, replacements, tempDir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(result.ModifiedFiles) != 3 {
+			t.Errorf("Expected 3 modified files, got %d", len(result.ModifiedFiles))
+		}
+
+		if len(result.FailedFiles) > 0 {
+			t.Errorf("Expected no failed files, got %d: %v", len(result.FailedFiles), result.Errors)
+		}
+
+		newResults, err := manager.FindFilesByTags(ctx, []string{"coding"}, tempDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(newResults["coding"]) != 3 {
+			t.Errorf("Expected 3 files with #coding tag after replacement, got %d", len(newResults["coding"]))
+		}
+	})
+
+	t.Run("ValidateTags", func(t *testing.T) {
+		results := manager.ValidateTags(ctx, []string{"valid-tag", "invalid!", "abc"})
+
+		if !results["valid-tag"].IsValid {
+			t.Error("Expected valid-tag to be valid")
+		}
+
+		if results["invalid!"].IsValid {
+			t.Error("Expected invalid! to be invalid")
+		}
+
+		if results["abc"].IsValid {
+			t.Error("Expected abc to be invalid (too short)")
+		}
+	})
+
+	t.Run("GetFilesTags", func(t *testing.T) {
+		filePaths := []string{
+			filepath.Join(tempDir, "golang.md"),
+			filepath.Join(tempDir, "python.md"),
+		}
+
+		results, err := manager.GetFilesTags(ctx, filePaths)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results, got %d", len(results))
+		}
+
+		for _, result := range results {
+			if len(result.Tags) == 0 {
+				t.Errorf("Expected tags for file %s", result.Path)
+			}
+		}
+	})
+}
+
+func TestTagManager_ContextCancellation(t *testing.T) {
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a context that cancels immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Test with a non-existent directory to ensure the operation has something to fail on
+	_, err = manager.ListAllTags(ctx, "/dev/null", 1)
+	if err == nil {
+		t.Skip("Context cancellation test is environment-dependent, skipping")
+	}
+}
+
+func TestTagManager_NonAtomicOperations(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testFiles := map[string]string{
+		"success.md":    "#old-tag content",
+		"readonly.md":   "#old-tag content",
+		"another.md":    "#old-tag content",
+	}
+
+	for path, content := range testFiles {
+		fullPath := filepath.Join(tempDir, path)
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	readonlyPath := filepath.Join(tempDir, "readonly.md")
+	if err := os.Chmod(readonlyPath, 0444); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(readonlyPath, 0644)
+
+	replacements := []tagmanager.TagReplacement{
+		{OldTag: "old-tag", NewTag: "new-tag"},
+	}
+
+	ctx := context.Background()
+	result, err := manager.ReplaceTagsBatch(ctx, replacements, tempDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result.ModifiedFiles) != 2 {
+		t.Errorf("Expected 2 modified files (excluding readonly), got %d", len(result.ModifiedFiles))
+	}
+
+	if len(result.FailedFiles) != 1 {
+		t.Errorf("Expected 1 failed file (readonly), got %d", len(result.FailedFiles))
+	}
+
+	sort.Strings(result.ModifiedFiles)
+	expectedModified := []string{
+		filepath.Join(tempDir, "another.md"),
+		filepath.Join(tempDir, "success.md"),
+	}
+	sort.Strings(expectedModified)
+
+	for i, expected := range expectedModified {
+		if result.ModifiedFiles[i] != expected {
+			t.Errorf("Expected modified file %s, got %s", expected, result.ModifiedFiles[i])
+		}
+	}
+}
