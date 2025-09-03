@@ -67,7 +67,7 @@ $ tag-manager find --tags="golang,programming"
 
 Replace a tag across your vault (dry run first!)
 ```bash
-tag-manager replace --old="old-tag" --new="new-tag" --root="/path/to/vault" --dry-run
+tag-manager replace --old="old-tag" --new="new-tag" --root="/vault" --dry-run
 DRY RUN MODE - No files will be modified
 
 Modified files: 6
@@ -91,69 +91,69 @@ Modified files: 6
 
 ```bash
 # Find files with single tag
-tag-manager find --tags="golang" --root="/Users/john/MyVault"
+tag-manager find --tags="golang" --root="/vault"
 
 # Find files with multiple tags (OR logic)
-tag-manager find --tags="golang,python,programming" --root="/Users/john/MyVault"
+tag-manager find --tags="golang,python,programming" --root="/vault"
 
 # Limit results and output as JSON
-tag-manager find --tags="golang" --root="/Users/john/MyVault" --max-results=10 --json
+tag-manager find --tags="golang" --root="/vault" --max-results=10 --json
 
 # Find with hashtag prefix (both work the same)
-tag-manager find --tags="#golang" --root="/Users/john/MyVault"
-tag-manager find --tags="golang" --root="/Users/john/MyVault"
+tag-manager find --tags="#golang" --root="/vault"
+tag-manager find --tags="golang" --root="/vault"
 ```
 
 ### 📊 **Listing All Tags**
 
 ```bash
 # List all tags with usage counts
-tag-manager list --root="/Users/john/MyVault"
+tag-manager list --root="/vault"
 
 # Filter tags by minimum usage count
-tag-manager list --root="/Users/john/MyVault" --min-count=5
+tag-manager list --root="/vault" --min-count=5
 
 # Filter tags by pattern (contains "dev")
-tag-manager list --root="/Users/john/MyVault" --pattern="dev"
+tag-manager list --root="/vault" --pattern="dev"
 
 # Combine filters and output as JSON
-tag-manager list --root="/Users/john/MyVault" --min-count=2 --pattern="programming" --json
+tag-manager list --root="/vault" --min-count=2 --pattern="programming" --json
 ```
 
 ### 🔄 **Replacing/Renaming Tags**
 
 ```bash
 # Single tag replacement (always dry-run first!)
-tag-manager replace --old="javascript" --new="js" --root="/Users/john/MyVault" --dry-run
+tag-manager replace --old="javascript" --new="js" --root="/vault" --dry-run
 
 # Apply the changes after reviewing
-tag-manager replace --old="javascript" --new="js" --root="/Users/john/MyVault"
+tag-manager replace --old="javascript" --new="js" --root="/vault"
 
 # Multiple tag replacements in one command
-tag-manager replace --replacements="js:javascript,py:python,ts:typescript" --root="/Users/john/MyVault" --dry-run
+tag-manager replace --replacements="js:javascript,py:python,ts:typescript" --root="/vault" --dry-run
 
 # Global dry-run flag (affects all subcommands that modify files)
-tag-manager --dry-run replace --old="test" --new="testing" --root="/Users/john/MyVault"
+tag-manager --dry-run replace --old="test" --new="testing" --root="/vault"
 ```
 
 ### 🏷️ **Tag Information**
 
 ```bash
 # Get detailed info about specific tags
-tag-manager info --tags="golang,python" --root="/Users/john/MyVault"
+tag-manager info --tags="golang,python" --root="/Users/john/vault"
 
 # Limit files shown per tag
-tag-manager info --tags="golang" --root="/Users/john/MyVault" --max-files-per-tag=5 --json
+tag-manager info --tags="golang" --root="/Users/john/vault" --max-files-per-tag=5 --json
 ```
 
 ### 📝 **Finding Untagged Files**
 
 ```bash
 # Find all files without any tags
-tag-manager untagged --root="/Users/john/MyVault"
+tag-manager untagged --root="/Users/john/vault"
 
 # Output as JSON for processing
-tag-manager untagged --root="/Users/john/MyVault" --json | jq '.[] | .path'
+tag-manager untagged --root="/Users/john/vault" --json | jq '.[] | .path'
 ```
 
 ### ✅ **Validating Tags**
@@ -170,10 +170,10 @@ tag-manager validate --tags="test-tag,123invalid,special@chars" --json
 
 ```bash
 # Get tags from specific files
-tag-manager file-tags --files="/Users/john/MyVault/note1.md,/Users/john/MyVault/note2.md"
+tag-manager file-tags --files="/vault/note1.md,/vault/note2.md"
 
 # Process multiple files with JSON output
-find /Users/john/MyVault -name "*.md" -print0 | \
+find /vault -name "*.md" -print0 | \
   xargs -0 -I {} tag-manager file-tags --files="{}" --json
 ```
 
@@ -248,7 +248,7 @@ additional_exclude_dirs:
   - "Private"
 ```
 
-Use with: `tag-manager --config=config.yaml list --root=~/vault`
+Use with: `tag-manager --config=config.yaml list --root=/vault`
 
 ## Tag Formats Supported
 
@@ -327,32 +327,32 @@ The tool automatically filters out common false positives:
 
 ```bash
 # 1. First, explore your vault's tags
-tag-manager list --root=~/vault --min-count=2
+tag-manager list --root=/vault --min-count=2
 
 # 2. Find inconsistent naming
-tag-manager list --root=~/vault --pattern="js\|javascript"
+tag-manager list --root=/vault --pattern="js\|javascript"
 
 # 3. Plan replacements (dry-run)
-tag-manager replace --replacements="js:javascript,py:python" --root=~/vault --dry-run
+tag-manager replace --replacements="js:javascript,py:python" --root=/vault --dry-run
 
 # 4. Apply changes
-tag-manager replace --replacements="js:javascript,py:python" --root=~/vault
+tag-manager replace --replacements="js:javascript,py:python" --root=/vault
 
 # 5. Verify results
-tag-manager find --tags="javascript,python" --root=~/vault --json
+tag-manager find --tags="javascript,python" --root=/vault --json
 ```
 
 ### Finding Maintenance Issues
 
 ```bash
 # Find files that need tags
-tag-manager untagged --root=~/vault
+tag-manager untagged --root=/vault
 
 # Find tags that might be typos (very low usage)
-tag-manager list --root=~/vault --min-count=1 --json | jq '.[] | select(.count == 1)'
+tag-manager list --root=/vault --min-count=1 --json | jq '.[] | select(.count == 1)'
 
 # Validate existing tags for syntax issues
-tag-manager list --root=~/vault --json | \
+tag-manager list --root=/vault --json | \
   jq -r '.[] | .name' | \
   xargs tag-manager validate --tags
 ```
@@ -361,16 +361,16 @@ tag-manager list --root=~/vault --json | \
 
 ```bash
 # Export all tags as a list
-tag-manager list --root=~/vault --json | jq -r '.[].name' > all-tags.txt
+tag-manager list --root=/vault --json | jq -r '.[].name' > all-tags.txt
 
 # Find files with specific tag and open in editor
-tag-manager find --tags="todo" --root=~/vault --json | \
+tag-manager find --tags="todo" --root=/vault --json | \
   jq -r '.todo[]' | \
   head -5 | \
   xargs code  # Opens in VS Code
 
 # Generate tag usage report
-tag-manager list --root=~/vault --json | \
+tag-manager list --root=/vault --json | \
   jq -r '["Tag", "Count", "Files"], (.[] | [.name, .count, (.files | length)]) | @csv' > report.csv
 ```
 
@@ -412,7 +412,7 @@ chmod -R u+w /path/to/vault
 tag-manager replace --old="test" --new="testing" --root="/path/to/vault"
 
 # Invalid configuration - check regex patterns
-tag-manager --config=custom.yaml list --root=~/vault
+tag-manager --config=custom.yaml list --root=/vault
 # Error: invalid hashtag pattern: missing closing bracket
 
 # Path traversal protection
@@ -438,7 +438,7 @@ tag-manager -mcp
       "command": "tag-manager",
       "args": ["-mcp"],
       "env": {
-        "OBSIDIAN_VAULT_PATH": "/Users/john/MyVault"
+        "OBSIDIAN_VAULT_PATH": "/vault"
       }
     }
   }
@@ -474,10 +474,10 @@ tag-manager -mcp --config="/path/to/vault-specific-config.yaml"
 tag-manager list --root=~/huge-vault --min-count=5
 
 # Process subsets of files
-tag-manager find --tags="golang" --root=~/vault/programming-notes
+tag-manager find --tags="golang" --root=/vault/programming-notes
 
 # Use JSON output for programmatic processing (faster parsing)
-tag-manager list --root=~/vault --json | jq '.[] | select(.count > 10)'
+tag-manager list --root=/vault --json | jq '.[] | select(.count > 10)'
 ```
 
 ### Benchmarks
@@ -493,23 +493,23 @@ tag-manager list --root=~/vault --json | jq '.[] | select(.count > 10)'
 #### 🚫 **"No tags found"**
 ```bash
 # Check file extensions (only .md files processed)
-find ~/vault -name "*.md" | wc -l
+find /vault -name "*.md" | wc -l
 
 # Check if files have actual tags
-grep -r "#" ~/vault/*.md | head -5
+grep -r "#" /vault/*.md | head -5
 
 # Verify exclude patterns aren't too broad
-tag-manager --config=minimal.yaml list --root=~/vault
+tag-manager --config=minimal.yaml list --root=/vault
 ```
 
 #### 🚫 **"Permission denied"**
 ```bash
 # Make files writable
-find ~/vault -name "*.md" -not -writable
-chmod u+w ~/vault/*.md
+find /vault -name "*.md" -not -writable
+chmod u+w /vault/*.md
 
 # Run dry-run first to preview changes
-tag-manager --dry-run replace --old=test --new=testing --root=~/vault
+tag-manager --dry-run replace --old=test --new=testing --root=/vault
 ```
 
 #### 🚫 **"Invalid regex configuration"**
@@ -519,7 +519,7 @@ tag-manager validate --tags="test" --config=custom.yaml
 # Error: invalid hashtag pattern: [missing bracket
 
 # Use default config to verify the tool works
-tag-manager list --root=~/vault  # Uses defaults
+tag-manager list --root=/vault  # Uses defaults
 ```
 
 #### 🚫 **"MCP server not responding"**
@@ -536,10 +536,10 @@ tag-manager -mcp --config=test.yaml
 
 ```bash
 # Enable verbose logging
-tag-manager -v list --root=~/vault
+tag-manager -v list --root=/vault
 
 # See what files are being processed
-tag-manager -v find --tags=golang --root=~/vault
+tag-manager -v find --tags=golang --root=/vault
 
 # Debug MCP server (check stderr)
 tag-manager -mcp -v 2>debug.log
