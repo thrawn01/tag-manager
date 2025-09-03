@@ -31,7 +31,7 @@ func NewDefaultTagManager(config *Config) (*DefaultTagManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create scanner: %w", err)
 	}
-	
+
 	return &DefaultTagManager{
 		scanner:   scanner,
 		validator: NewDefaultValidator(config),
@@ -126,7 +126,7 @@ func (m *DefaultTagManager) ListAllTags(ctx context.Context, rootPath string, mi
 				fileList = append(fileList, file)
 			}
 			sort.Strings(fileList)
-			
+
 			result = append(result, TagInfo{
 				Name:  tag,
 				Count: count,
@@ -254,7 +254,7 @@ func (m *DefaultTagManager) ValidateTags(ctx context.Context, tags []string) map
 		if ctx.Err() != nil {
 			break
 		}
-		
+
 		normalized := m.normalizeTag(tag)
 		results[tag] = m.validator.ValidateTag(normalized)
 	}
