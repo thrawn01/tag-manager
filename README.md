@@ -73,6 +73,11 @@ DRY RUN MODE - No files will be modified
 Modified files: 6
 ```
 
+Claude MCP Server
+```bash
+claude mcp add -s project tag-manager -- tag-manager -mcp
+```
+
 ## CLI Usage Guide
 
 ### 📋 Command Reference
@@ -424,30 +429,25 @@ tag-manager list --root="../../../etc"
 
 ### Setup for Claude Code
 
-1. **Start the MCP server:**
+**Start the MCP server:**
 ```bash
-tag-manager -mcp
-# Server starts on stdio, waiting for Claude Code connection
+claude mcp add -s project tag-manager -- tag-manager -mcp
 ```
 
-2. **Configure Claude Code** (`claude_desktop_config.json`):
+**Configure Claude Code** (`.mcp.json`):
 ```json
 {
   "mcpServers": {
-    "obsidian-tag-manager": {
+    "tag-manager": {
+      "type": "stdio",
       "command": "tag-manager",
-      "args": ["-mcp"],
-      "env": {
-        "OBSIDIAN_VAULT_PATH": "/vault"
-      }
+      "args": [
+        "-mcp",
+      ],
+      "env": {}
     }
   }
 }
-```
-
-3. **Custom configuration for MCP:**
-```bash
-tag-manager -mcp --config="/path/to/vault-specific-config.yaml"
 ```
 
 ### Available MCP Tools

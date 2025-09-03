@@ -4,9 +4,7 @@
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
-*.test
+/tag-manager
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -44,6 +42,5 @@ test-vault/
 testdata/
 
 # Build artifacts
-tag-manager
 dist/
 build/
