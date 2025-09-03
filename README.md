@@ -67,7 +67,7 @@ $ tag-manager find --tags="golang,programming"
 
 Replace a tag across your vault (dry run first!)
 ```bash
-tag-manager replace --old="old-tag" --new="new-tag" --root="/path/to/your/vault" --dry-run
+tag-manager replace --old="old-tag" --new="new-tag" --root="/path/to/vault" --dry-run
 DRY RUN MODE - No files will be modified
 
 Modified files: 6
