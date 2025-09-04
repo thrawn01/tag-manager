@@ -43,9 +43,9 @@ type TagUpdateParams struct {
 }
 
 type TagUpdateResult struct {
-	FilesMigrated []string          `json:"files_migrated"`
-	ModifiedFiles []string          `json:"modified_files"`
-	TagsRemoved   map[string]int    `json:"tags_removed"`
-	TagsAdded     map[string]int    `json:"tags_added"`
-	Errors        []string          `json:"errors,omitempty"`
+	FilesMigrated []string       `json:"files_migrated"`
+	ModifiedFiles []string       `json:"modified_files"`
+	TagsRemoved   map[string]int `json:"tags_removed"`
+	TagsAdded     map[string]int `json:"tags_added"`
+	Errors        []string       `json:"errors,omitempty"`
 }

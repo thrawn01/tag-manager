@@ -357,3 +357,125 @@ tags: ["existing"]
 	assert.Contains(t, contentStr, "author: Test Author")
 	assert.Contains(t, contentStr, "date: \"2024-01-01\"")
 }
+
+func TestTagConflictResolution(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+title: "Test Document"  
+tags: ["existing-tag"]
+---
+# Test Content`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		addTags     []string
+		removeTags  []string
+		expectError bool
+	}{
+		{
+			name:        "No conflicts",
+			addTags:     []string{"new-tag", "another-tag"},
+			removeTags:  []string{"old-tag", "obsolete"},
+			expectError: false,
+		},
+		{
+			name:        "Case insensitive conflicts resolved",
+			addTags:     []string{"Tag1", "tag2"},
+			removeTags:  []string{"TAG1", "existing-tag"},
+			expectError: false,
+		},
+		{
+			name:        "All tags conflict",
+			addTags:     []string{"same-tag", "another"},
+			removeTags:  []string{"same-tag", "another"},
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := manager.UpdateTags(ctx, test.addTags, test.removeTags, tempDir, []string{"test.md"}, true)
+
+			if test.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "no operations remain after conflict resolution")
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
+}
+
+func TestDuplicateTagHandling(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+title: "Test Document"
+tags: ["existing-tag", "another-tag"]
+---
+# Test Content`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{"existing-tag", "new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.ModifiedFiles, 1)
+	assert.Equal(t, 1, result.TagsAdded["new-tag"])
+	assert.Equal(t, 0, result.TagsAdded["existing-tag"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "- existing-tag")
+	assert.Contains(t, contentStr, "- another-tag")
+	assert.Contains(t, contentStr, "- new-tag")
+}
+
+func TestRemoveTagsFromBody(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+tags: ["frontmatter-tag"]
+---
+# Test Document
+
+This content has #body-tag and #another-body-tag in the text.
+Also #frontmatter-tag appears in body.`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{}, []string{"body-tag", "frontmatter-tag"}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.ModifiedFiles, 1)
+	assert.Equal(t, 1, result.TagsRemoved["frontmatter-tag"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.NotContains(t, contentStr, "#frontmatter-tag")
+	assert.NotContains(t, contentStr, "frontmatter-tag")
+	assert.Contains(t, contentStr, "#another-body-tag")
+}

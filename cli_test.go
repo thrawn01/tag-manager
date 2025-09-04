@@ -163,13 +163,13 @@ func TestMCPServerCapabilities(t *testing.T) {
 
 		// Verify all expected tools are available with correct descriptions
 		expectedTools := map[string]string{
-			"find_files_by_tags":  "Find files containing specific tags",
-			"get_tags_info":       "Get detailed information about specific tags including file lists",
-			"list_all_tags":       "List all tags with usage statistics and optional filtering",
-			"replace_tags_batch":  "Replace/rename tags across multiple files with batch operation",
-			"get_untagged_files":  "Find files that don't have any tags",
-			"validate_tags":       "Validate tag syntax and get suggestions for invalid tags",
-			"get_files_tags":      "Get all tags associated with specific files",
+			"find_files_by_tags": "Find files containing specific tags",
+			"get_tags_info":      "Get detailed information about specific tags including file lists",
+			"list_all_tags":      "List all tags with usage statistics and optional filtering",
+			"replace_tags_batch": "Replace/rename tags across multiple files with batch operation",
+			"get_untagged_files": "Find files that don't have any tags",
+			"validate_tags":      "Validate tag syntax and get suggestions for invalid tags",
+			"get_files_tags":     "Get all tags associated with specific files",
 		}
 
 		foundTools := make(map[string]bool)

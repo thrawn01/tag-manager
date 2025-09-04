@@ -316,6 +316,11 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 		return nil, fmt.Errorf("invalid root path: %w", err)
 	}
 
+	resolvedAddTags, resolvedRemoveTags, err := m.resolveTagConflicts(addTags, removeTags)
+	if err != nil {
+		return nil, fmt.Errorf("tag conflict resolution failed: %w", err)
+	}
+
 	result := &TagUpdateResult{
 		ModifiedFiles: make([]string, 0),
 		Errors:        make([]string, 0),
@@ -325,7 +330,13 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 	}
 
 	for _, filePath := range filePaths {
-		absolutePath := filepath.Join(rootPath, filePath)
+		cleanPath := filepath.Clean(filePath)
+		if filepath.IsAbs(cleanPath) || strings.Contains(cleanPath, "..") {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: path must be relative to root and cannot contain '..'", filePath))
+			continue
+		}
+
+		absolutePath := filepath.Join(rootPath, cleanPath)
 		if err := m.validator.ValidatePath(absolutePath); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: invalid path: %v", filePath, err))
 			continue
@@ -346,7 +357,7 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 			continue
 		}
 
-		addedTags, removedTags := m.updateFrontmatterTags(frontmatterData, m.normalizeTags(addTags), m.normalizeTags(removeTags))
+		addedTags, removedTags := m.updateFrontmatterTags(frontmatterData, m.normalizeTags(resolvedAddTags), m.normalizeTags(resolvedRemoveTags))
 		if len(addedTags) > 0 || len(removedTags) > 0 {
 			modified = true
 			for _, tag := range addedTags {
@@ -364,7 +375,9 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 				result.Errors = append(result.Errors, fmt.Sprintf("%s: error serializing frontmatter: %v", filePath, err))
 				continue
 			}
-			newContent = frontmatterString + bodyContent
+
+			modifiedBodyContent := m.removeHashtagsFromBody(bodyContent, resolvedRemoveTags)
+			newContent = frontmatterString + modifiedBodyContent
 		} else {
 			newContent = originalContent
 		}
@@ -485,4 +498,67 @@ func (m *DefaultTagManager) updateFrontmatterTags(data map[string]interface{}, a
 	}
 
 	return addedTags, removedTagsList
+}
+
+func (m *DefaultTagManager) resolveTagConflicts(addTags, removeTags []string) ([]string, []string, error) {
+	var filteredAddTags []string
+	var filteredRemoveTags []string
+
+	normalizedAddTags := m.normalizeTags(addTags)
+	normalizedRemoveTags := m.normalizeTags(removeTags)
+
+	for _, addTag := range normalizedAddTags {
+		hasConflict := false
+		for _, removeTag := range normalizedRemoveTags {
+			if strings.EqualFold(addTag, removeTag) {
+				hasConflict = true
+				break
+			}
+		}
+		if !hasConflict {
+			filteredAddTags = append(filteredAddTags, addTag)
+		}
+	}
+
+	for _, removeTag := range normalizedRemoveTags {
+		hasConflict := false
+		for _, addTag := range normalizedAddTags {
+			if strings.EqualFold(removeTag, addTag) {
+				hasConflict = true
+				break
+			}
+		}
+		if !hasConflict {
+			filteredRemoveTags = append(filteredRemoveTags, removeTag)
+		}
+	}
+
+	if len(filteredAddTags) == 0 && len(filteredRemoveTags) == 0 {
+		return nil, nil, fmt.Errorf("no operations remain after conflict resolution")
+	}
+
+	sort.Strings(filteredAddTags)
+	sort.Strings(filteredRemoveTags)
+
+	return filteredAddTags, filteredRemoveTags, nil
+}
+
+func (m *DefaultTagManager) removeHashtagsFromBody(content string, tags []string) string {
+	modifiedContent := content
+	for _, tag := range tags {
+		normalizedTag := m.normalizeTag(tag)
+
+		if len(normalizedTag) == 0 {
+			continue
+		}
+
+		quotedTag := regexp.QuoteMeta(normalizedTag)
+		pattern := `#` + quotedTag + `\b`
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		modifiedContent = re.ReplaceAllString(modifiedContent, "")
+	}
+	return modifiedContent
 }
