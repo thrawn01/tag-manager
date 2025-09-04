@@ -34,7 +34,7 @@ Also has #hashtag-tag in content.`,
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -158,7 +158,7 @@ Also has #hashtag-tag in content.`,
 	})
 }
 
-func TestTagManager_ContextCancellation(t *testing.T) {
+func TestTagManagerContextCancellation(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestTagManager_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestTagManager_NonAtomicOperations(t *testing.T) {
+func TestTagManagerNonAtomicOperations(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
@@ -192,7 +192,7 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -202,7 +202,7 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		_ = os.Chmod(readonlyPath, 0644)
+		_ = os.Chmod(readonlyPath, tagmanager.DefaultFilePermissions)
 	}()
 
 	replacements := []tagmanager.TagReplacement{
@@ -250,7 +250,7 @@ tags: ["existing"]
 ---
 # Test Content`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{"existing"}, tempDir, []string{"test.md"}, false)
@@ -309,7 +309,7 @@ tags: ["existing-tag"]
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testFile := filepath.Join(tempDir, "test.md")
-			require.NoError(t, os.WriteFile(testFile, []byte(test.content), 0644))
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
 			result, err := manager.UpdateTags(ctx, test.addTags, []string{}, tempDir, []string{"test.md"}, false)
 			require.NoError(t, err)
@@ -341,7 +341,7 @@ tags: ["existing"]
 ---
 # Test Content`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
@@ -371,7 +371,7 @@ tags: ["existing-tag"]
 ---
 # Test Content`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -428,7 +428,7 @@ tags: ["existing-tag", "another-tag"]
 ---
 # Test Content`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{"existing-tag", "new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
@@ -462,7 +462,7 @@ tags: ["frontmatter-tag"]
 This content has #body-tag and #another-body-tag in the text.
 Also #frontmatter-tag appears in body.`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{}, []string{"body-tag", "frontmatter-tag"}, tempDir, []string{"test.md"}, false)
@@ -533,7 +533,7 @@ Some text here
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testFile := filepath.Join(tempDir, "test.md")
-			require.NoError(t, os.WriteFile(testFile, []byte(test.content), 0644))
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
 			ctx := context.Background()
 			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
@@ -563,7 +563,7 @@ func TestHashtagMigration(t *testing.T) {
 # Document Title
 Content with #body-tag remains unchanged.`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
@@ -637,7 +637,7 @@ func TestMigrationBoundaryDetection(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testFile := filepath.Join(tempDir, "test.md")
-			require.NoError(t, os.WriteFile(testFile, []byte(test.content), 0644))
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
 			ctx := context.Background()
 			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
@@ -671,7 +671,7 @@ tags: ["existing"]
 # Content
 Body with #body-tag`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, false)

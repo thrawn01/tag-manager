@@ -23,7 +23,7 @@ func TestCLIIntegration(t *testing.T) {
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0644))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions))
 	}
 
 	tests := []struct {
@@ -91,7 +91,7 @@ func TestCLIGlobalFlags(t *testing.T) {
 	tempDir := t.TempDir()
 
 	testFile := filepath.Join(tempDir, "test.md")
-	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n#golang"), 0644))
+	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n#golang"), tagmanager.DefaultFilePermissions))
 
 	tests := []struct {
 		name string
@@ -177,4 +177,194 @@ func TestMCPServerCapabilities(t *testing.T) {
 		assert.Len(t, tools.Tools, 7)
 
 	})
+}
+
+func TestUpdateCommand(t *testing.T) {
+	tempDir := t.TempDir()
+
+	testFiles := map[string]string{
+		"test1.md": `#old-tag #keep-tag
+# Test File 1
+Content with #body-tag`,
+		"test2.md": `---
+title: "Test 2"
+tags: ["existing"]
+---
+#migrate-tag
+Content here`,
+		"test3.md": "# Test 3\nNo tags here",
+	}
+
+	for path, content := range testFiles {
+		fullPath := filepath.Join(tempDir, path)
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions))
+	}
+
+	tests := []struct {
+		name        string
+		args        []string
+		expectError bool
+	}{
+		{
+			name: "AddTags",
+			args: []string{"tag-manager", "update", "--add=new-tag", "--files=test1.md", "--root=" + tempDir, "--json"},
+		},
+		{
+			name: "RemoveTags",
+			args: []string{"tag-manager", "update", "--remove=old-tag", "--files=test1.md", "--root=" + tempDir, "--json"},
+		},
+		{
+			name: "AddAndRemoveTags",
+			args: []string{"tag-manager", "update", "--add=added-tag", "--remove=old-tag", "--files=test1.md", "--root=" + tempDir, "--json"},
+		},
+		{
+			name: "DryRunMode",
+			args: []string{"tag-manager", "update", "--add=test-tag", "--files=test1.md", "--root=" + tempDir, "--dry-run", "--json"},
+		},
+		{
+			name: "MultipleFiles",
+			args: []string{"tag-manager", "update", "--add=bulk-tag", "--files=test1.md,test2.md", "--root=" + tempDir, "--json"},
+		},
+		{
+			name: "HashtagMigration",
+			args: []string{"tag-manager", "update", "--add=added-tag", "--files=test2.md", "--root=" + tempDir, "--json"},
+		},
+		{
+			name:        "MissingAddAndRemove",
+			args:        []string{"tag-manager", "update", "--files=test1.md", "--root=" + tempDir},
+			expectError: true,
+		},
+		{
+			name:        "MissingFiles",
+			args:        []string{"tag-manager", "update", "--add=tag", "--root=" + tempDir},
+			expectError: true,
+		},
+		{
+			name:        "AbsoluteFilePath",
+			args:        []string{"tag-manager", "update", "--add=tag", "--files=/absolute/path/file.md", "--root=" + tempDir},
+			expectError: true,
+		},
+		{
+			name:        "NonExistentFile",
+			args:        []string{"tag-manager", "update", "--add=tag", "--files=nonexistent.md", "--root=" + tempDir, "--json"},
+			expectError: false, // Should complete but report error in result
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := tagmanager.RunCmd(test.args)
+			if test.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestUpdateParameterValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		addTags     string
+		removeTags  string
+		files       string
+		expectError bool
+	}{
+		{
+			name:    "ValidAddOnly",
+			addTags: "tag1,tag2",
+			files:   "file.md",
+		},
+		{
+			name:       "ValidRemoveOnly",
+			removeTags: "tag1,tag2",
+			files:      "file.md",
+		},
+		{
+			name:       "ValidAddAndRemove",
+			addTags:    "add-tag",
+			removeTags: "remove-tag",
+			files:      "file.md",
+		},
+		{
+			name:        "NoAddOrRemove",
+			files:       "file.md",
+			expectError: true,
+		},
+		{
+			name:        "NoFiles",
+			addTags:     "tag",
+			expectError: true,
+		},
+		{
+			name:        "EmptyFiles",
+			addTags:     "tag",
+			files:       "",
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := tagmanager.ValidateUpdateParameters(test.addTags, test.removeTags, test.files)
+			if test.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestFilePathParsing(t *testing.T) {
+	tests := []struct {
+		name           string
+		filesStr       string
+		expectedPaths  []string
+		expectError    bool
+	}{
+		{
+			name:          "SingleFile",
+			filesStr:      "file.md",
+			expectedPaths: []string{"file.md"},
+		},
+		{
+			name:          "MultipleFiles",
+			filesStr:      "file1.md,file2.md,file3.md",
+			expectedPaths: []string{"file1.md", "file2.md", "file3.md"},
+		},
+		{
+			name:          "FilesWithSpaces",
+			filesStr:      " file1.md , file2.md , file3.md ",
+			expectedPaths: []string{"file1.md", "file2.md", "file3.md"},
+		},
+		{
+			name:        "AbsolutePath",
+			filesStr:    "/absolute/path.md",
+			expectError: true,
+		},
+		{
+			name:        "EmptyString",
+			filesStr:    "",
+			expectError: true,
+		},
+		{
+			name:        "OnlySpaces",
+			filesStr:    "   ",
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			paths, err := tagmanager.ParseFilePaths(test.filesStr, "/root")
+			if test.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, test.expectedPaths, paths)
+			}
+		})
+	}
 }

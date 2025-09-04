@@ -8,7 +8,7 @@ import (
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
-func TestDefaultValidator_ValidateTag(t *testing.T) {
+func TestDefaultValidatorValidateTag(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	validator := tagmanager.NewDefaultValidator(config)
 
@@ -143,7 +143,7 @@ func TestDefaultValidator_ValidateTag(t *testing.T) {
 	}
 }
 
-func TestDefaultValidator_ValidatePath(t *testing.T) {
+func TestDefaultValidatorValidatePath(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	validator := tagmanager.NewDefaultValidator(config)
 
@@ -197,7 +197,7 @@ func TestDefaultValidator_ValidatePath(t *testing.T) {
 	}
 }
 
-func TestDefaultValidator_ValidateConfig(t *testing.T) {
+func TestDefaultValidatorValidateConfig(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	validator := tagmanager.NewDefaultValidator(config)
 
@@ -285,7 +285,7 @@ func TestDefaultValidator_ValidateConfig(t *testing.T) {
 	}
 }
 
-func TestDefaultValidator_WithInvalidRegexConfig(t *testing.T) {
+func TestDefaultValidatorWithInvalidRegexConfig(t *testing.T) {
 	// Test that validator handles invalid regex patterns gracefully
 	invalidConfig := &tagmanager.Config{
 		HashtagPattern:  "[invalid",

@@ -12,7 +12,7 @@ import (
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
-func TestFilesystemScanner_ExtractTags(t *testing.T) {
+func TestFilesystemScannerExtractTags(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	scanner, err := tagmanager.NewFilesystemScanner(config)
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ This has #hashtag and #more-tags in the content.`,
 	}
 }
 
-func TestFilesystemScanner_ScanDirectory(t *testing.T) {
+func TestFilesystemScannerScanDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
 	testFiles := map[string]string{
@@ -112,7 +112,7 @@ func TestFilesystemScanner_ScanDirectory(t *testing.T) {
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
 		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0755))
-		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0644))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions))
 	}
 
 	config := tagmanager.DefaultConfig()
@@ -139,7 +139,7 @@ func TestFilesystemScanner_ScanDirectory(t *testing.T) {
 	}
 }
 
-func TestFilesystemScanner_EdgeCases(t *testing.T) {
+func TestFilesystemScannerEdgeCases(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	scanner, err := tagmanager.NewFilesystemScanner(config)
 	require.NoError(t, err)

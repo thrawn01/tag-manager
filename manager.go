@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const defaultFilePermissions = 0644
+const DefaultFilePermissions = 0644
 
 type TagManager interface {
 	FindFilesByTags(ctx context.Context, tags []string, rootPath string) (map[string][]string, error)
@@ -291,7 +291,7 @@ func (m *DefaultTagManager) replaceTagsInFile(filePath string, replacements []Ta
 	}
 
 	if modifiedContent != originalContent && !dryRun {
-		return os.WriteFile(filePath, []byte(modifiedContent), 0644)
+		return os.WriteFile(filePath, []byte(modifiedContent), DefaultFilePermissions)
 	}
 
 	return nil
@@ -405,7 +405,7 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 		}
 
 		if modified && !dryRun {
-			if err := os.WriteFile(absolutePath, []byte(newContent), defaultFilePermissions); err != nil {
+			if err := os.WriteFile(absolutePath, []byte(newContent), DefaultFilePermissions); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", filePath, err))
 				continue
 			}
