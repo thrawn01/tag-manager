@@ -141,9 +141,11 @@ func findFilesCommand(ctx context.Context, manager TagManager, args []string, ve
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	const defaultMaxResults = 100
+
 	tags := fs.String("tags", "", "Comma-separated list of tags to search for")
 	root := fs.String("root", cwd, "Root directory to search")
-	maxResults := fs.Int("max-results", 100, "Maximum files per tag")
+	maxResults := fs.Int("max-results", defaultMaxResults, "Maximum files per tag")
 	jsonOutput := fs.Bool("json", false, "Output as JSON")
 
 	if err := fs.Parse(args); err != nil {

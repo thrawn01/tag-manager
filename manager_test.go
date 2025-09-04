@@ -20,16 +20,24 @@ func TestTagManagerE2e(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testFiles := map[string]string{
-		"golang.md":     "# Go Tutorial\n#golang #programming #tutorial",
-		"python.md":     "# Python Guide\n#python #programming #data-science",
-		"javascript.md": "# JS Basics\n#javascript #web-development #programming",
-		"untagged.md":   "# No Tags\nThis file has no tags",
-		"mixed.md": `---
+	const (
+		golangContent     = "# Go Tutorial\n#golang #programming #tutorial"
+		pythonContent     = "# Python Guide\n#python #programming #data-science"
+		javascriptContent = "# JS Basics\n#javascript #web-development #programming"
+		untaggedContent   = "# No Tags\nThis file has no tags"
+		mixedContent      = `---
 tags: ["yaml-tag", "frontend"]
 ---
 # Mixed Tags
-Also has #hashtag-tag in content.`,
+Also has #hashtag-tag in content.`
+	)
+
+	testFiles := map[string]string{
+		"golang.md":     golangContent,
+		"python.md":     pythonContent,
+		"javascript.md": javascriptContent,
+		"untagged.md":   untaggedContent,
+		"mixed.md":      mixedContent,
 	}
 
 	for path, content := range testFiles {
@@ -243,14 +251,14 @@ func TestUpdateTags(t *testing.T) {
 	manager, err := tagmanager.NewDefaultTagManager(config)
 	require.NoError(t, err)
 
-	testFile := filepath.Join(tempDir, "test.md")
-	content := `---
+	const testContent = `---
 title: "Test Document"
 tags: ["existing"]
 ---
 # Test Content`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+	testFile := filepath.Join(tempDir, "test.md")
+	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{"existing"}, tempDir, []string{"test.md"}, false)
@@ -332,8 +340,7 @@ func TestFrontMatterFieldPreservation(t *testing.T) {
 	manager, err := tagmanager.NewDefaultTagManager(config)
 	require.NoError(t, err)
 
-	testFile := filepath.Join(tempDir, "test.md")
-	content := `---
+	const testContent = `---
 title: "Important Title"
 author: "Test Author"
 date: "2024-01-01"
@@ -341,7 +348,8 @@ tags: ["existing"]
 ---
 # Test Content`
 
-	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+	testFile := filepath.Join(tempDir, "test.md")
+	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
 
 	ctx := context.Background()
 	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)

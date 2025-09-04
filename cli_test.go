@@ -131,9 +131,8 @@ func TestMCPServerCapabilities(t *testing.T) {
 			serverDone <- tagmanager.RunCmdWithOptions([]string{"tag-manager", "-mcp"}, options)
 		}()
 
-		// Create MCP client
-		client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v1.0.0"}, nil)
-		session, err := client.Connect(ctx, clientTransport, nil)
+		// Create MCP client and connect
+		session, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v1.0.0"}, nil).Connect(ctx, clientTransport, nil)
 		require.NoError(t, err)
 		defer func() {
 			_ = session.Close()
@@ -156,6 +155,7 @@ func TestMCPServerCapabilities(t *testing.T) {
 			"get_untagged_files": "Find files that don't have any tags",
 			"validate_tags":      "Validate tag syntax and get suggestions for invalid tags",
 			"get_files_tags":     "Get all tags associated with specific files",
+			"update_tags":        "Add and remove tags from specific files with automatic hashtag migration",
 		}
 
 		foundTools := make(map[string]bool)
@@ -164,7 +164,7 @@ func TestMCPServerCapabilities(t *testing.T) {
 				foundTools[tool.Name] = true
 				assert.Equal(t, expectedDesc, tool.Description)
 			} else {
-				assert.Failf(t, "Unexpected tool found", "tool: %s", tool.Name)
+				t.Errorf("Unexpected tool found: %s", tool.Name)
 			}
 		}
 
@@ -173,10 +173,159 @@ func TestMCPServerCapabilities(t *testing.T) {
 			assert.True(t, foundTools[toolName])
 		}
 
-		// Verify we have exactly 7 tools
-		assert.Len(t, tools.Tools, 7)
+		// Verify we have exactly 8 tools
+		assert.Len(t, tools.Tools, 8)
 
 	})
+}
+
+func TestUpdateTagsTool(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `#migrate-tag
+# Test File
+Content with #body-tag`
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	req := &mcp.CallToolRequest{}
+
+	tests := []struct {
+		name          string
+		args          tagmanager.TagUpdateParams
+		expectError   bool
+		expectedMigrated int
+	}{
+		{
+			name: "AddTags",
+			args: tagmanager.TagUpdateParams{
+				AddTags:   []string{"new-tag"},
+				FilePaths: []string{"test.md"},
+				Root:      tempDir,
+			},
+			expectedMigrated: 1,
+		},
+		{
+			name: "RemoveTags", 
+			args: tagmanager.TagUpdateParams{
+				RemoveTags: []string{"migrate-tag"},
+				FilePaths:  []string{"test.md"},
+				Root:       tempDir,
+			},
+		},
+		{
+			name: "AddAndRemoveTags",
+			args: tagmanager.TagUpdateParams{
+				AddTags:    []string{"added-tag"},
+				RemoveTags: []string{"migrate-tag"},
+				FilePaths:  []string{"test.md"},
+				Root:       tempDir,
+			},
+		},
+		{
+			name: "InvalidRoot",
+			args: tagmanager.TagUpdateParams{
+				AddTags:   []string{"tag"},
+				FilePaths: []string{"test.md"},
+				Root:      "/nonexistent",
+			},
+			expectError: false, // UpdateTags doesn't fail, but reports errors in result
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Reset test file for each test
+			require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+			result, data, err := tagmanager.UpdateTagsTool(ctx, req, test.args, manager)
+			
+			if test.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Nil(t, data)
+			} else {
+				assert.NoError(t, err)
+				assert.Nil(t, result)
+				assert.NotNil(t, data)
+				
+				updateResult, ok := data.(*tagmanager.TagUpdateResult)
+				require.True(t, ok)
+				
+				if test.expectedMigrated > 0 {
+					assert.Len(t, updateResult.FilesMigrated, test.expectedMigrated)
+				}
+			}
+		})
+	}
+}
+
+func TestMCPUpdateTagsIntegration(t *testing.T) {
+	tempDir := t.TempDir()
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `#migrate-tag #keep-tag
+# Test File
+Content here`
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+
+	// Create in-memory transports for testing
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+
+	// Start our MCP server using RunCmdWithOptions in a goroutine
+	serverDone := make(chan error, 1)
+	go func() {
+		options := &tagmanager.RunCmdOptions{
+			MCPTransport: serverTransport,
+		}
+		serverDone <- tagmanager.RunCmdWithOptions([]string{"tag-manager", "-mcp"}, options)
+	}()
+
+	// Create MCP client and connect
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v1.0.0"}, nil).Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = session.Close()
+	}()
+
+	// Test that we can ping the server
+	err = session.Ping(ctx, nil)
+	require.NoError(t, err)
+
+	// Test the update_tags tool through MCP
+	toolParams := map[string]interface{}{
+		"add_tags":   []string{"new-tag"},
+		"file_paths": []string{"test.md"},
+		"root":       tempDir,
+	}
+
+	toolResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "update_tags",
+		Arguments: toolParams,
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, toolResult)
+
+	// Verify the tool executed successfully
+	assert.NotNil(t, toolResult)
+
+	// Read the modified file to verify changes
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	// Should have migrated hashtags and added new tag
+	assert.Contains(t, contentStr, "- migrate-tag")
+	assert.Contains(t, contentStr, "- keep-tag") 
+	assert.Contains(t, contentStr, "- new-tag")
+	assert.NotContains(t, contentStr, "#migrate-tag")
+	assert.NotContains(t, contentStr, "#keep-tag")
 }
 
 func TestUpdateCommand(t *testing.T) {

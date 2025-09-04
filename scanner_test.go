@@ -100,13 +100,22 @@ This has #hashtag and #more-tags in the content.`,
 func TestFilesystemScannerScanDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
+	const (
+		file1Content           = "# File 1\n#golang #programming"
+		file2Content           = "# File 2\n#python #data-science"
+		untaggedContent        = "# Untagged\nNo tags here"
+		excalidrawContent      = "# Excalidraw\n#diagram"
+		file3Content           = "# File 3\n#javascript"
+		archivedContent        = "# Old\n#archived"
+	)
+
 	testFiles := map[string]string{
-		"file1.md":           "# File 1\n#golang #programming",
-		"file2.md":           "# File 2\n#python #data-science",
-		"untagged.md":        "# Untagged\nNo tags here",
-		"file.excalidraw.md": "# Excalidraw\n#diagram",
-		"subdir/file3.md":    "# File 3\n#javascript",
-		"100 Archive/old.md": "# Old\n#archived",
+		"file1.md":           file1Content,
+		"file2.md":           file2Content,
+		"untagged.md":        untaggedContent,
+		"file.excalidraw.md": excalidrawContent,
+		"subdir/file3.md":    file3Content,
+		"100 Archive/old.md": archivedContent,
 	}
 
 	for path, content := range testFiles {
