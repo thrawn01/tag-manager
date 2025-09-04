@@ -34,3 +34,18 @@ type ValidationResult struct {
 	Issues      []string `json:"issues,omitempty"`
 	Suggestions []string `json:"suggestions,omitempty"`
 }
+
+type TagUpdateParams struct {
+	RemoveTags []string `json:"remove_tags"`
+	FilePaths  []string `json:"file_paths"`
+	AddTags    []string `json:"add_tags"`
+	Root       string   `json:"root"`
+}
+
+type TagUpdateResult struct {
+	FilesMigrated []string          `json:"files_migrated"`
+	ModifiedFiles []string          `json:"modified_files"`
+	TagsRemoved   map[string]int    `json:"tags_removed"`
+	TagsAdded     map[string]int    `json:"tags_added"`
+	Errors        []string          `json:"errors,omitempty"`
+}

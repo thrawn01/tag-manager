@@ -8,7 +8,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
+
+const defaultFilePermissions = 0644
 
 type TagManager interface {
 	FindFilesByTags(ctx context.Context, tags []string, rootPath string) (map[string][]string, error)
@@ -18,6 +22,7 @@ type TagManager interface {
 	GetUntaggedFiles(ctx context.Context, rootPath string) ([]FileTagInfo, error)
 	GetFilesTags(ctx context.Context, filePaths []string) ([]FileTagInfo, error)
 	ValidateTags(ctx context.Context, tags []string) map[string]*ValidationResult
+	UpdateTags(ctx context.Context, addTags []string, removeTags []string, rootPath string, filePaths []string, dryRun bool) (*TagUpdateResult, error)
 }
 
 type DefaultTagManager struct {
@@ -304,4 +309,180 @@ func (m *DefaultTagManager) normalizeTags(tags []string) []string {
 		normalized[i] = m.normalizeTag(tag)
 	}
 	return normalized
+}
+
+func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, removeTags []string, rootPath string, filePaths []string, dryRun bool) (*TagUpdateResult, error) {
+	if err := m.validator.ValidatePath(rootPath); err != nil {
+		return nil, fmt.Errorf("invalid root path: %w", err)
+	}
+
+	result := &TagUpdateResult{
+		ModifiedFiles: make([]string, 0),
+		Errors:        make([]string, 0),
+		TagsAdded:     make(map[string]int),
+		TagsRemoved:   make(map[string]int),
+		FilesMigrated: make([]string, 0),
+	}
+
+	for _, filePath := range filePaths {
+		absolutePath := filepath.Join(rootPath, filePath)
+		if err := m.validator.ValidatePath(absolutePath); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: invalid path: %v", filePath, err))
+			continue
+		}
+
+		content, err := os.ReadFile(absolutePath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", filePath, err))
+			continue
+		}
+
+		originalContent := string(content)
+		modified := false
+
+		frontmatterData, bodyContent, err := m.parseFrontmatter(originalContent)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: malformed YAML frontmatter: %v", filePath, err))
+			continue
+		}
+
+		addedTags, removedTags := m.updateFrontmatterTags(frontmatterData, m.normalizeTags(addTags), m.normalizeTags(removeTags))
+		if len(addedTags) > 0 || len(removedTags) > 0 {
+			modified = true
+			for _, tag := range addedTags {
+				result.TagsAdded[tag]++
+			}
+			for _, tag := range removedTags {
+				result.TagsRemoved[tag]++
+			}
+		}
+
+		var newContent string
+		if modified {
+			frontmatterString, err := m.serializeFrontmatter(frontmatterData)
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: error serializing frontmatter: %v", filePath, err))
+				continue
+			}
+			newContent = frontmatterString + bodyContent
+		} else {
+			newContent = originalContent
+		}
+
+		if modified && !dryRun {
+			if err := os.WriteFile(absolutePath, []byte(newContent), defaultFilePermissions); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", filePath, err))
+				continue
+			}
+		}
+
+		if modified {
+			result.ModifiedFiles = append(result.ModifiedFiles, filePath)
+		}
+	}
+
+	return result, nil
+}
+
+func (m *DefaultTagManager) parseFrontmatter(content string) (map[string]interface{}, string, error) {
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 || lines[0] != "---" {
+		return make(map[string]interface{}), content, nil
+	}
+
+	endIdx := -1
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "---" {
+			endIdx = i
+			break
+		}
+	}
+
+	if endIdx == -1 {
+		return make(map[string]interface{}), content, nil
+	}
+
+	var frontmatterData map[string]interface{}
+	if frontmatterContent := strings.Join(lines[1:endIdx], "\n"); frontmatterContent != "" {
+		if err := yaml.Unmarshal([]byte(frontmatterContent), &frontmatterData); err != nil {
+			return nil, "", fmt.Errorf("YAML parse error: %w", err)
+		}
+	}
+
+	if frontmatterData == nil {
+		frontmatterData = make(map[string]interface{})
+	}
+
+	return frontmatterData, strings.Join(lines[endIdx+1:], "\n"), nil
+}
+
+func (m *DefaultTagManager) serializeFrontmatter(data map[string]interface{}) (string, error) {
+	if len(data) == 0 {
+		return "", nil
+	}
+
+	yamlBytes, err := yaml.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("YAML marshal error: %w", err)
+	}
+
+	return "---\n" + string(yamlBytes) + "---\n", nil
+}
+
+func (m *DefaultTagManager) updateFrontmatterTags(data map[string]interface{}, addTags, removeTags []string) ([]string, []string) {
+	var currentTags []string
+	var addedTags []string
+	var removedTagsList []string
+
+	if tagsInterface, exists := data["tags"]; exists {
+		switch v := tagsInterface.(type) {
+		case []interface{}:
+			for _, tag := range v {
+				if tagStr, ok := tag.(string); ok {
+					currentTags = append(currentTags, strings.TrimSpace(tagStr))
+				}
+			}
+		case []string:
+			for _, tag := range v {
+				currentTags = append(currentTags, strings.TrimSpace(tag))
+			}
+		}
+	}
+
+	tagSet := make(map[string]bool)
+	for _, tag := range currentTags {
+		tagSet[strings.ToLower(tag)] = true
+	}
+
+	for _, tag := range addTags {
+		if !tagSet[strings.ToLower(tag)] {
+			currentTags = append(currentTags, tag)
+			tagSet[strings.ToLower(tag)] = true
+			addedTags = append(addedTags, tag)
+		}
+	}
+
+	var filteredTags []string
+	for _, tag := range currentTags {
+		shouldRemove := false
+		for _, removeTag := range removeTags {
+			if strings.EqualFold(tag, removeTag) {
+				shouldRemove = true
+				removedTagsList = append(removedTagsList, tag)
+				break
+			}
+		}
+		if !shouldRemove {
+			filteredTags = append(filteredTags, tag)
+		}
+	}
+
+	if len(filteredTags) > 0 || len(addedTags) > 0 {
+		sort.Strings(filteredTags)
+		data["tags"] = filteredTags
+	} else {
+		delete(data, "tags")
+	}
+
+	return addedTags, removedTagsList
 }
