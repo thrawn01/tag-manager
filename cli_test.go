@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
@@ -21,9 +23,7 @@ func TestCLIIntegration(t *testing.T) {
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0644))
 	}
 
 	tests := []struct {
@@ -79,13 +79,9 @@ func TestCLIIntegration(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := tagmanager.RunCmd(test.args)
 			if test.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				assert.Error(t, err)
 			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -95,9 +91,7 @@ func TestCLIGlobalFlags(t *testing.T) {
 	tempDir := t.TempDir()
 
 	testFile := filepath.Join(tempDir, "test.md")
-	if err := os.WriteFile(testFile, []byte("# Test\n#golang"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n#golang"), 0644))
 
 	tests := []struct {
 		name string
@@ -116,9 +110,7 @@ func TestCLIGlobalFlags(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			err := tagmanager.RunCmd(test.args)
-			if err != nil {
-				t.Errorf("Unexpected error with global flags: %v", err)
-			}
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -142,24 +134,18 @@ func TestMCPServerCapabilities(t *testing.T) {
 		// Create MCP client
 		client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v1.0.0"}, nil)
 		session, err := client.Connect(ctx, clientTransport, nil)
-		if err != nil {
-			t.Fatalf("Failed to connect MCP client: %v", err)
-		}
+		require.NoError(t, err)
 		defer func() {
 			_ = session.Close()
 		}()
 
 		// Test that we can ping the server
 		err = session.Ping(ctx, nil)
-		if err != nil {
-			t.Fatalf("Failed to ping MCP server: %v", err)
-		}
+		require.NoError(t, err)
 
 		// List available tools from the server
 		tools, err := session.ListTools(ctx, &mcp.ListToolsParams{})
-		if err != nil {
-			t.Fatalf("Failed to list tools: %v", err)
-		}
+		require.NoError(t, err)
 
 		// Verify all expected tools are available with correct descriptions
 		expectedTools := map[string]string{
@@ -176,26 +162,19 @@ func TestMCPServerCapabilities(t *testing.T) {
 		for _, tool := range tools.Tools {
 			if expectedDesc, expected := expectedTools[tool.Name]; expected {
 				foundTools[tool.Name] = true
-				if tool.Description != expectedDesc {
-					t.Errorf("Tool %s: expected description '%s', got '%s'", tool.Name, expectedDesc, tool.Description)
-				}
+				assert.Equal(t, expectedDesc, tool.Description)
 			} else {
-				t.Errorf("Unexpected tool found: %s", tool.Name)
+				assert.Failf(t, "Unexpected tool found", "tool: %s", tool.Name)
 			}
 		}
 
 		// Check that all expected tools were found
 		for toolName := range expectedTools {
-			if !foundTools[toolName] {
-				t.Errorf("Expected tool '%s' was not found", toolName)
-			}
+			assert.True(t, foundTools[toolName])
 		}
 
 		// Verify we have exactly 7 tools
-		if len(tools.Tools) != 7 {
-			t.Errorf("Expected exactly 7 tools, got %d", len(tools.Tools))
-		}
+		assert.Len(t, tools.Tools, 7)
 
-		t.Logf("Successfully discovered %d tools from MCP server", len(tools.Tools))
 	})
 }

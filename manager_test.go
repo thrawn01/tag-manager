@@ -12,7 +12,7 @@ import (
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
-func TestTagManagerE2E(t *testing.T) {
+func TestTagManagerE2e(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
@@ -270,7 +270,7 @@ tags: ["existing"]
 	assert.NotContains(t, contentStr, "existing")
 }
 
-func TestYamlFrontMatterParsing(t *testing.T) {
+func TestYAMLFrontMatterParsing(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
@@ -478,4 +478,218 @@ Also #frontmatter-tag appears in body.`
 	assert.NotContains(t, contentStr, "#frontmatter-tag")
 	assert.NotContains(t, contentStr, "frontmatter-tag")
 	assert.Contains(t, contentStr, "#another-body-tag")
+}
+
+func TestTopOfFileDetection(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		content      string
+		expectedTags []string
+	}{
+		{
+			name: "Single line hashtags at top",
+			content: `#tag1 #tag2 #tag3
+# Document Title
+Content with #body-tag`,
+			expectedTags: []string{"tag1", "tag2", "tag3"},
+		},
+		{
+			name: "Multi-line hashtags at top",
+			content: `#tag1 #tag2
+#tag3 #tag4
+
+# Document Title
+Content with #body-tag`,
+			expectedTags: []string{"tag1", "tag2", "tag3", "tag4"},
+		},
+		{
+			name: "No top hashtags",
+			content: `# Document Title
+Content with #body-tag #another`,
+			expectedTags: []string{},
+		},
+		{
+			name: "Empty lines before hashtags",
+			content: `
+
+#tag1 #tag2
+# Document Title`,
+			expectedTags: []string{"tag1", "tag2"},
+		},
+		{
+			name: "Mixed content - stops at first non-hashtag",
+			content: `#tag1 #tag2
+Some text here
+#tag3 #tag4`,
+			expectedTags: []string{"tag1", "tag2"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testFile := filepath.Join(tempDir, "test.md")
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), 0644))
+
+			ctx := context.Background()
+			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
+			require.NoError(t, err)
+
+			if len(test.expectedTags) > 0 {
+				assert.Len(t, result.FilesMigrated, 1)
+				for _, tag := range test.expectedTags {
+					assert.Equal(t, 1, result.TagsAdded[tag])
+				}
+			} else {
+				assert.Len(t, result.FilesMigrated, 0)
+			}
+		})
+	}
+}
+
+func TestHashtagMigration(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `#tag1 #tag2 #tag3
+
+# Document Title
+Content with #body-tag remains unchanged.`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.FilesMigrated, 1)
+	assert.Contains(t, result.FilesMigrated, "test.md")
+	assert.Equal(t, 1, result.TagsAdded["tag1"])
+	assert.Equal(t, 1, result.TagsAdded["tag2"])
+	assert.Equal(t, 1, result.TagsAdded["tag3"])
+	assert.Equal(t, 1, result.TagsAdded["new-tag"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "- tag1")
+	assert.Contains(t, contentStr, "- tag2")
+	assert.Contains(t, contentStr, "- tag3")
+	assert.Contains(t, contentStr, "- new-tag")
+	assert.NotContains(t, contentStr, "#tag1")
+	assert.NotContains(t, contentStr, "#tag2") 
+	assert.NotContains(t, contentStr, "#tag3")
+	assert.Contains(t, contentStr, "#body-tag")
+	assert.Contains(t, contentStr, "# Document Title")
+}
+
+func TestMigrationBoundaryDetection(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		content     string
+		expectMigration bool
+		expectedTags []string
+	}{
+		{
+			name: "Hashtags before title",
+			content: `#tag1 #tag2
+# Title`,
+			expectMigration: true,
+			expectedTags: []string{"tag1", "tag2"},
+		},
+		{
+			name: "Hashtags with empty lines",
+			content: `#tag1
+
+# Title`,
+			expectMigration: true,
+			expectedTags: []string{"tag1"},
+		},
+		{
+			name: "No boundary - all hashtags",
+			content: `#tag1 #tag2
+#tag3 #tag4`,
+			expectMigration: true,
+			expectedTags: []string{"tag1", "tag2", "tag3", "tag4"},
+		},
+		{
+			name: "Immediate boundary",
+			content: `Document starts here
+#tag1 #tag2`,
+			expectMigration: false,
+			expectedTags: []string{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testFile := filepath.Join(tempDir, "test.md")
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), 0644))
+
+			ctx := context.Background()
+			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
+			require.NoError(t, err)
+
+			if test.expectMigration {
+				assert.Len(t, result.FilesMigrated, 1)
+				for _, tag := range test.expectedTags {
+					assert.Equal(t, 1, result.TagsAdded[tag])
+				}
+			} else {
+				assert.Len(t, result.FilesMigrated, 0)
+			}
+		})
+	}
+}
+
+func TestMigrationWithExistingFrontmatter(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+title: "Document"
+tags: ["existing"]
+---
+#migrated1 #migrated2
+
+# Content
+Body with #body-tag`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.FilesMigrated, 1)
+	assert.Equal(t, 1, result.TagsAdded["migrated1"])
+	assert.Equal(t, 1, result.TagsAdded["migrated2"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "- existing")
+	assert.Contains(t, contentStr, "- migrated1")
+	assert.Contains(t, contentStr, "- migrated2")
+	assert.Contains(t, contentStr, "title: Document")
+	assert.NotContains(t, contentStr, "#migrated1")
+	assert.NotContains(t, contentStr, "#migrated2")
+	assert.Contains(t, contentStr, "#body-tag")
 }

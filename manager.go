@@ -316,17 +316,25 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 		return nil, fmt.Errorf("invalid root path: %w", err)
 	}
 
-	resolvedAddTags, resolvedRemoveTags, err := m.resolveTagConflicts(addTags, removeTags)
-	if err != nil {
-		return nil, fmt.Errorf("tag conflict resolution failed: %w", err)
+	var resolvedAddTags, resolvedRemoveTags []string
+	var err error
+	
+	if len(addTags) > 0 || len(removeTags) > 0 {
+		resolvedAddTags, resolvedRemoveTags, err = m.resolveTagConflicts(addTags, removeTags)
+		if err != nil {
+			return nil, fmt.Errorf("tag conflict resolution failed: %w", err)
+		}
+	} else {
+		resolvedAddTags = []string{}
+		resolvedRemoveTags = []string{}
 	}
 
 	result := &TagUpdateResult{
-		ModifiedFiles: make([]string, 0),
-		Errors:        make([]string, 0),
-		TagsAdded:     make(map[string]int),
-		TagsRemoved:   make(map[string]int),
 		FilesMigrated: make([]string, 0),
+		ModifiedFiles: make([]string, 0),
+		TagsRemoved:   make(map[string]int),
+		TagsAdded:     make(map[string]int),
+		Errors:        make([]string, 0),
 	}
 
 	for _, filePath := range filePaths {
@@ -357,11 +365,25 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 			continue
 		}
 
-		addedTags, removedTags := m.updateFrontmatterTags(frontmatterData, m.normalizeTags(resolvedAddTags), m.normalizeTags(resolvedRemoveTags))
+		topHashtags := m.DetectTopOfFileHashtags(bodyContent)
+		migrationOccurred := len(topHashtags) > 0
+		if migrationOccurred {
+			result.FilesMigrated = append(result.FilesMigrated, filePath)
+			for _, tag := range topHashtags {
+				result.TagsAdded[tag]++
+			}
+			bodyContent = m.removeTopHashtags(bodyContent, topHashtags)
+			modified = true
+		}
+
+		allAddTags := append(m.normalizeTags(resolvedAddTags), topHashtags...)
+		addedTags, removedTags := m.updateFrontmatterTags(frontmatterData, allAddTags, m.normalizeTags(resolvedRemoveTags))
 		if len(addedTags) > 0 || len(removedTags) > 0 {
 			modified = true
 			for _, tag := range addedTags {
-				result.TagsAdded[tag]++
+				if !migrationOccurred || !containsTag(topHashtags, tag) {
+					result.TagsAdded[tag]++
+				}
 			}
 			for _, tag := range removedTags {
 				result.TagsRemoved[tag]++
@@ -561,4 +583,101 @@ func (m *DefaultTagManager) removeHashtagsFromBody(content string, tags []string
 		modifiedContent = re.ReplaceAllString(modifiedContent, "")
 	}
 	return modifiedContent
+}
+
+func (m *DefaultTagManager) DetectTopOfFileHashtags(content string) []string {
+	boundary := m.FindFirstNonHashtagContent(content)
+	return m.extractTopHashtags(content, boundary)
+}
+
+func (m *DefaultTagManager) FindFirstNonHashtagContent(content string) int {
+	lines := strings.Split(content, "\n")
+	
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		
+		if !m.isHashtagOnlyLine(trimmed) {
+			return i
+		}
+	}
+	
+	return len(lines)
+}
+
+func (m *DefaultTagManager) isHashtagOnlyLine(line string) bool {
+	words := strings.Fields(line)
+	if len(words) == 0 {
+		return false
+	}
+	
+	for _, word := range words {
+		if !strings.HasPrefix(word, "#") {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *DefaultTagManager) extractTopHashtags(content string, boundary int) []string {
+	if boundary == 0 {
+		return nil
+	}
+	
+	lines := strings.Split(content, "\n")
+	var hashtags []string
+	
+	for i := 0; i < boundary && i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		
+		words := strings.Fields(line)
+		for _, word := range words {
+			if strings.HasPrefix(word, "#") {
+				tag := m.normalizeTag(word)
+				if tag != "" {
+					hashtags = append(hashtags, tag)
+				}
+			}
+		}
+	}
+	
+	return hashtags
+}
+
+func (m *DefaultTagManager) removeTopHashtags(content string, hashtags []string) string {
+	if len(hashtags) == 0 {
+		return content
+	}
+	
+	lines := strings.Split(content, "\n")
+	boundary := m.FindFirstNonHashtagContent(content)
+	
+	for i := 0; i < boundary && i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		
+		if m.isHashtagOnlyLine(line) {
+			lines[i] = ""
+		}
+	}
+	
+	result := strings.Join(lines, "\n")
+	result = strings.TrimLeft(result, "\n")
+	return result
+}
+
+func containsTag(tags []string, target string) bool {
+	for _, tag := range tags {
+		if strings.EqualFold(tag, target) {
+			return true
+		}
+	}
+	return false
 }
