@@ -195,9 +195,9 @@ Content with #body-tag`
 	req := &mcp.CallToolRequest{}
 
 	tests := []struct {
-		name          string
-		args          tagmanager.TagUpdateParams
-		expectError   bool
+		name             string
+		args             tagmanager.TagUpdateParams
+		expectError      bool
 		expectedMigrated int
 	}{
 		{
@@ -210,7 +210,7 @@ Content with #body-tag`
 			expectedMigrated: 1,
 		},
 		{
-			name: "RemoveTags", 
+			name: "RemoveTags",
 			args: tagmanager.TagUpdateParams{
 				RemoveTags: []string{"migrate-tag"},
 				FilePaths:  []string{"test.md"},
@@ -243,7 +243,7 @@ Content with #body-tag`
 			require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
 			result, data, err := tagmanager.UpdateTagsTool(ctx, req, test.args, manager)
-			
+
 			if test.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, result)
@@ -252,10 +252,10 @@ Content with #body-tag`
 				assert.NoError(t, err)
 				assert.Nil(t, result)
 				assert.NotNil(t, data)
-				
+
 				updateResult, ok := data.(*tagmanager.TagUpdateResult)
 				require.True(t, ok)
-				
+
 				if test.expectedMigrated > 0 {
 					assert.Len(t, updateResult.FilesMigrated, test.expectedMigrated)
 				}
@@ -322,7 +322,7 @@ Content here`
 
 	// Should have migrated hashtags and added new tag
 	assert.Contains(t, contentStr, "- migrate-tag")
-	assert.Contains(t, contentStr, "- keep-tag") 
+	assert.Contains(t, contentStr, "- keep-tag")
 	assert.Contains(t, contentStr, "- new-tag")
 	assert.NotContains(t, contentStr, "#migrate-tag")
 	assert.NotContains(t, contentStr, "#keep-tag")
@@ -468,10 +468,10 @@ func TestUpdateParameterValidation(t *testing.T) {
 
 func TestFilePathParsing(t *testing.T) {
 	tests := []struct {
-		name           string
-		filesStr       string
-		expectedPaths  []string
-		expectError    bool
+		name          string
+		filesStr      string
+		expectedPaths []string
+		expectError   bool
 	}{
 		{
 			name:          "SingleFile",

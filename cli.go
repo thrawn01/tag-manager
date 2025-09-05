@@ -579,7 +579,7 @@ func ParseFilePaths(filesStr, root string) ([]string, error) {
 	if filesStr == "" {
 		return nil, fmt.Errorf("files parameter cannot be empty")
 	}
-	
+
 	parts := strings.Split(filesStr, ",")
 	var filePaths []string
 	for _, part := range parts {
@@ -591,10 +591,10 @@ func ParseFilePaths(filesStr, root string) ([]string, error) {
 			filePaths = append(filePaths, path)
 		}
 	}
-	
+
 	if len(filePaths) == 0 {
 		return nil, fmt.Errorf("no valid file paths provided")
 	}
-	
+
 	return filePaths, nil
 }

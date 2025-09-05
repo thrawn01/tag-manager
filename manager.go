@@ -318,7 +318,7 @@ func (m *DefaultTagManager) UpdateTags(ctx context.Context, addTags []string, re
 
 	var resolvedAddTags, resolvedRemoveTags []string
 	var err error
-	
+
 	if len(addTags) > 0 || len(removeTags) > 0 {
 		resolvedAddTags, resolvedRemoveTags, err = m.resolveTagConflicts(addTags, removeTags)
 		if err != nil {
@@ -592,18 +592,18 @@ func (m *DefaultTagManager) DetectTopOfFileHashtags(content string) []string {
 
 func (m *DefaultTagManager) FindFirstNonHashtagContent(content string) int {
 	lines := strings.Split(content, "\n")
-	
+
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
-		
+
 		if !m.isHashtagOnlyLine(trimmed) {
 			return i
 		}
 	}
-	
+
 	return len(lines)
 }
 
@@ -612,7 +612,7 @@ func (m *DefaultTagManager) isHashtagOnlyLine(line string) bool {
 	if len(words) == 0 {
 		return false
 	}
-	
+
 	for _, word := range words {
 		if !strings.HasPrefix(word, "#") {
 			return false
@@ -625,16 +625,16 @@ func (m *DefaultTagManager) extractTopHashtags(content string, boundary int) []s
 	if boundary == 0 {
 		return nil
 	}
-	
+
 	lines := strings.Split(content, "\n")
 	var hashtags []string
-	
+
 	for i := 0; i < boundary && i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
-		
+
 		words := strings.Fields(line)
 		for _, word := range words {
 			if strings.HasPrefix(word, "#") {
@@ -645,7 +645,7 @@ func (m *DefaultTagManager) extractTopHashtags(content string, boundary int) []s
 			}
 		}
 	}
-	
+
 	return hashtags
 }
 
@@ -653,21 +653,21 @@ func (m *DefaultTagManager) removeTopHashtags(content string, hashtags []string)
 	if len(hashtags) == 0 {
 		return content
 	}
-	
+
 	lines := strings.Split(content, "\n")
 	boundary := m.FindFirstNonHashtagContent(content)
-	
+
 	for i := 0; i < boundary && i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
-		
+
 		if m.isHashtagOnlyLine(line) {
 			lines[i] = ""
 		}
 	}
-	
+
 	result := strings.Join(lines, "\n")
 	result = strings.TrimLeft(result, "\n")
 	return result

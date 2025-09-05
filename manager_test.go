@@ -593,7 +593,7 @@ Content with #body-tag remains unchanged.`
 	assert.Contains(t, contentStr, "- tag3")
 	assert.Contains(t, contentStr, "- new-tag")
 	assert.NotContains(t, contentStr, "#tag1")
-	assert.NotContains(t, contentStr, "#tag2") 
+	assert.NotContains(t, contentStr, "#tag2")
 	assert.NotContains(t, contentStr, "#tag3")
 	assert.Contains(t, contentStr, "#body-tag")
 	assert.Contains(t, contentStr, "# Document Title")
@@ -606,17 +606,17 @@ func TestMigrationBoundaryDetection(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name        string
-		content     string
+		name            string
+		content         string
 		expectMigration bool
-		expectedTags []string
+		expectedTags    []string
 	}{
 		{
 			name: "Hashtags before title",
 			content: `#tag1 #tag2
 # Title`,
 			expectMigration: true,
-			expectedTags: []string{"tag1", "tag2"},
+			expectedTags:    []string{"tag1", "tag2"},
 		},
 		{
 			name: "Hashtags with empty lines",
@@ -624,21 +624,21 @@ func TestMigrationBoundaryDetection(t *testing.T) {
 
 # Title`,
 			expectMigration: true,
-			expectedTags: []string{"tag1"},
+			expectedTags:    []string{"tag1"},
 		},
 		{
 			name: "No boundary - all hashtags",
 			content: `#tag1 #tag2
 #tag3 #tag4`,
 			expectMigration: true,
-			expectedTags: []string{"tag1", "tag2", "tag3", "tag4"},
+			expectedTags:    []string{"tag1", "tag2", "tag3", "tag4"},
 		},
 		{
 			name: "Immediate boundary",
 			content: `Document starts here
 #tag1 #tag2`,
 			expectMigration: false,
-			expectedTags: []string{},
+			expectedTags:    []string{},
 		},
 	}
 

@@ -101,12 +101,12 @@ func TestFilesystemScannerScanDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
 	const (
-		file1Content           = "# File 1\n#golang #programming"
-		file2Content           = "# File 2\n#python #data-science"
-		untaggedContent        = "# Untagged\nNo tags here"
-		excalidrawContent      = "# Excalidraw\n#diagram"
-		file3Content           = "# File 3\n#javascript"
-		archivedContent        = "# Old\n#archived"
+		file1Content      = "# File 1\n#golang #programming"
+		file2Content      = "# File 2\n#python #data-science"
+		untaggedContent   = "# Untagged\nNo tags here"
+		excalidrawContent = "# Excalidraw\n#diagram"
+		file3Content      = "# File 3\n#javascript"
+		archivedContent   = "# Old\n#archived"
 	)
 
 	testFiles := map[string]string{
