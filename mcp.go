@@ -140,6 +140,15 @@ func GetFilesTagsTool(ctx context.Context, req *mcp.CallToolRequest, args GetFil
 	return nil, result, nil
 }
 
+func UpdateTagsTool(ctx context.Context, req *mcp.CallToolRequest, args TagUpdateParams, manager TagManager) (*mcp.CallToolResult, any, error) {
+	result, err := manager.UpdateTags(ctx, args.AddTags, args.RemoveTags, args.Root, args.FilePaths, false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to update tags: %w", err)
+	}
+
+	return nil, result, nil
+}
+
 // Helper functions for result limiting
 func limitFilesByTagsResults(result map[string][]string, maxResults int) map[string][]string {
 	limited := make(map[string][]string)
@@ -242,6 +251,13 @@ func RunMCPServer(configPath string, transport *mcp.InMemoryTransport) error {
 		Description: "Get all tags associated with specific files",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetFilesTagsParams) (*mcp.CallToolResult, any, error) {
 		return GetFilesTagsTool(ctx, req, args, manager)
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "update_tags",
+		Description: "Add and remove tags from specific files with automatic hashtag migration",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args TagUpdateParams) (*mcp.CallToolResult, any, error) {
+		return UpdateTagsTool(ctx, req, args, manager)
 	})
 
 	// Set up context with cancellation

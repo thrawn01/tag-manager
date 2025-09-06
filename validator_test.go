@@ -4,10 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
-func TestDefaultValidator_ValidateTag(t *testing.T) {
+func TestDefaultValidatorValidateTag(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	validator := tagmanager.NewDefaultValidator(config)
 
@@ -121,14 +122,10 @@ func TestDefaultValidator_ValidateTag(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			result := validator.ValidateTag(test.tag)
 
-			if result.IsValid != test.expectValid {
-				t.Errorf("Expected IsValid=%v, got %v", test.expectValid, result.IsValid)
-			}
+			assert.Equal(t, test.expectValid, result.IsValid)
 
 			if !test.expectValid {
-				if len(result.Issues) == 0 {
-					t.Error("Expected validation issues but got none")
-				}
+				assert.NotEmpty(t, result.Issues)
 
 				for _, expectedIssue := range test.expectedIssues {
 					found := false
@@ -138,21 +135,15 @@ func TestDefaultValidator_ValidateTag(t *testing.T) {
 							break
 						}
 					}
-					if !found {
-						t.Errorf("Expected issue containing '%s' but got: %v", expectedIssue, result.Issues)
-					}
+					assert.True(t, found)
 				}
 			}
 
-			// Valid tags should have suggestions for improvements even if valid
-			if test.expectValid && len(result.Suggestions) > 0 {
-				t.Logf("Suggestions for valid tag '%s': %v", test.tag, result.Suggestions)
-			}
 		})
 	}
 }
 
-func TestDefaultValidator_ValidatePath(t *testing.T) {
+func TestDefaultValidatorValidatePath(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	validator := tagmanager.NewDefaultValidator(config)
 
@@ -197,18 +188,16 @@ func TestDefaultValidator_ValidatePath(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := validator.ValidatePath(test.path)
 
-			if test.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-
-			if !test.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
+			if test.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
-func TestDefaultValidator_ValidateConfig(t *testing.T) {
+func TestDefaultValidatorValidateConfig(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	validator := tagmanager.NewDefaultValidator(config)
 
@@ -287,18 +276,16 @@ func TestDefaultValidator_ValidateConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := validator.ValidateConfig(test.config)
 
-			if test.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-
-			if !test.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
+			if test.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
-func TestDefaultValidator_WithInvalidRegexConfig(t *testing.T) {
+func TestDefaultValidatorWithInvalidRegexConfig(t *testing.T) {
 	// Test that validator handles invalid regex patterns gracefully
 	invalidConfig := &tagmanager.Config{
 		HashtagPattern:  "[invalid",
@@ -315,9 +302,7 @@ func TestDefaultValidator_WithInvalidRegexConfig(t *testing.T) {
 	result := validator.ValidateTag("test-tag")
 
 	// Should be invalid due to regex configuration error
-	if result.IsValid {
-		t.Error("Expected tag to be invalid due to regex config error")
-	}
+	assert.False(t, result.IsValid)
 
 	// Should have an issue about invalid regex
 	found := false
@@ -329,7 +314,5 @@ func TestDefaultValidator_WithInvalidRegexConfig(t *testing.T) {
 		}
 	}
 
-	if !found {
-		t.Errorf("Expected issue about invalid regex configuration, got: %v", result.Issues)
-	}
+	assert.True(t, found)
 }

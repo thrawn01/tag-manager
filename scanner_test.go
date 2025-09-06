@@ -7,15 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
-func TestFilesystemScanner_ExtractTags(t *testing.T) {
+func TestFilesystemScannerExtractTags(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	scanner, err := tagmanager.NewFilesystemScanner(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	tests := []struct {
 		name     string
@@ -83,10 +83,7 @@ This has #hashtag and #more-tags in the content.`,
 		t.Run(test.name, func(t *testing.T) {
 			tags := scanner.ExtractTags(test.content)
 
-			if len(tags) != len(test.expected) {
-				t.Errorf("Expected %d tags, got %d: %v", len(test.expected), len(tags), tags)
-				return
-			}
+			assert.Len(t, tags, len(test.expected))
 
 			tagMap := make(map[string]bool)
 			for _, tag := range tags {
@@ -94,78 +91,67 @@ This has #hashtag and #more-tags in the content.`,
 			}
 
 			for _, expected := range test.expected {
-				if !tagMap[expected] {
-					t.Errorf("Expected tag %s not found in %v", expected, tags)
-				}
+				assert.True(t, tagMap[expected])
 			}
 		})
 	}
 }
 
-func TestFilesystemScanner_ScanDirectory(t *testing.T) {
+func TestFilesystemScannerScanDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
+	const (
+		file1Content      = "# File 1\n#golang #programming"
+		file2Content      = "# File 2\n#python #data-science"
+		untaggedContent   = "# Untagged\nNo tags here"
+		excalidrawContent = "# Excalidraw\n#diagram"
+		file3Content      = "# File 3\n#javascript"
+		archivedContent   = "# Old\n#archived"
+	)
+
 	testFiles := map[string]string{
-		"file1.md":           "# File 1\n#golang #programming",
-		"file2.md":           "# File 2\n#python #data-science",
-		"untagged.md":        "# Untagged\nNo tags here",
-		"file.excalidraw.md": "# Excalidraw\n#diagram",
-		"subdir/file3.md":    "# File 3\n#javascript",
-		"100 Archive/old.md": "# Old\n#archived",
+		"file1.md":           file1Content,
+		"file2.md":           file2Content,
+		"untagged.md":        untaggedContent,
+		"file.excalidraw.md": excalidrawContent,
+		"subdir/file3.md":    file3Content,
+		"100 Archive/old.md": archivedContent,
 	}
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0755))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions))
 	}
 
 	config := tagmanager.DefaultConfig()
 	scanner, err := tagmanager.NewFilesystemScanner(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	var results []tagmanager.FileTagInfo
 
 	for fileInfo, err := range scanner.ScanDirectory(ctx, tempDir, nil) {
-		if err != nil {
-			t.Errorf("Scan error: %v", err)
-			continue
-		}
+		require.NoError(t, err)
 		results = append(results, fileInfo)
 	}
 
 	expectedFiles := []string{"file1.md", "file2.md", "untagged.md", "subdir/file3.md"}
 
-	if len(results) != len(expectedFiles) {
-		t.Errorf("Expected %d files, got %d", len(expectedFiles), len(results))
-	}
+	assert.Len(t, results, len(expectedFiles))
 
 	for _, result := range results {
 		relPath, _ := filepath.Rel(tempDir, result.Path)
 
-		if strings.Contains(relPath, "excalidraw") {
-			t.Errorf("Excalidraw file should be excluded: %s", relPath)
-		}
-
-		if strings.Contains(relPath, "100 Archive") {
-			t.Errorf("Archive file should be excluded: %s", relPath)
-		}
+		assert.NotContains(t, relPath, "excalidraw")
+		assert.NotContains(t, relPath, "100 Archive")
 	}
 }
 
-func TestFilesystemScanner_EdgeCases(t *testing.T) {
+func TestFilesystemScannerEdgeCases(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	scanner, err := tagmanager.NewFilesystemScanner(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	tests := []struct {
 		name     string
@@ -203,10 +189,7 @@ func TestFilesystemScanner_EdgeCases(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tags := scanner.ExtractTags(test.content)
 
-			if len(tags) != len(test.expected) {
-				t.Errorf("Expected %d tags, got %d: %v", len(test.expected), len(tags), tags)
-				return
-			}
+			assert.Len(t, tags, len(test.expected))
 
 			tagMap := make(map[string]bool)
 			for _, tag := range tags {
@@ -214,9 +197,7 @@ func TestFilesystemScanner_EdgeCases(t *testing.T) {
 			}
 
 			for _, expected := range test.expected {
-				if !tagMap[expected] {
-					t.Errorf("Expected tag %s not found in %v", expected, tags)
-				}
+				assert.True(t, tagMap[expected])
 			}
 		})
 	}

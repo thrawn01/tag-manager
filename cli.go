@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -79,6 +80,8 @@ func RunCmdWithOptions(args []string, options *RunCmdOptions) error {
 		return listTagsCommand(ctx, manager, remaining[1:], *verbose)
 	case "replace":
 		return replaceTagCommand(ctx, manager, remaining[1:], *dryRun, *verbose)
+	case "update":
+		return updateCommand(ctx, manager, remaining[1:], *dryRun, *verbose)
 	case "untagged":
 		return untaggedFilesCommand(ctx, manager, remaining[1:], *verbose)
 	case "validate":
@@ -109,6 +112,7 @@ Commands:
   info         Get detailed information about tags
   list         List all tags with usage statistics
   replace      Replace/rename tags across files
+  update       Add or remove tags from specific files
   untagged     Find files without any tags
   validate     Validate tag syntax and suggest fixes
   file-tags    Get tags for specific files
@@ -117,6 +121,7 @@ Examples:
   tag-manager find --tags="#golang,#python" --root="/path/to/vault"
   tag-manager list --root="/path/to/vault" --min-count=2
   tag-manager replace --old="#old-tag" --new="#new-tag" --root="/path/to/vault" --dry-run
+  tag-manager update --add="golang,python" --remove="old-tag" --root="/path/to/vault" --files="file1.md,file2.md" --dry-run
   tag-manager untagged --root="/path/to/vault"
   tag-manager validate --tags="#test,#invalid-tag!"
   tag-manager file-tags --files="/path/file1.md,/path/file2.md"
@@ -136,9 +141,11 @@ func findFilesCommand(ctx context.Context, manager TagManager, args []string, ve
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	const defaultMaxResults = 100
+
 	tags := fs.String("tags", "", "Comma-separated list of tags to search for")
 	root := fs.String("root", cwd, "Root directory to search")
-	maxResults := fs.Int("max-results", 100, "Maximum files per tag")
+	maxResults := fs.Int("max-results", defaultMaxResults, "Maximum files per tag")
 	jsonOutput := fs.Bool("json", false, "Output as JSON")
 
 	if err := fs.Parse(args); err != nil {
@@ -458,4 +465,136 @@ func getFileTagsCommand(ctx context.Context, manager TagManager, args []string, 
 	}
 
 	return nil
+}
+
+func updateCommand(ctx context.Context, manager TagManager, args []string, globalDryRun bool, verbose bool) error {
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	addTags := fs.String("add", "", "Comma-separated tags to add")
+	removeTags := fs.String("remove", "", "Comma-separated tags to remove")
+	files := fs.String("files", "", "Comma-separated file paths relative to root")
+	root := fs.String("root", cwd, "Root directory for file paths")
+	jsonOutput := fs.Bool("json", false, "Output as JSON")
+	localDryRun := fs.Bool("dry-run", false, "Show what would be changed without making changes")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if err := ValidateUpdateParameters(*addTags, *removeTags, *files); err != nil {
+		return err
+	}
+
+	addTagList := parseTagList(*addTags)
+	removeTagList := parseTagList(*removeTags)
+	filePaths, err := ParseFilePaths(*files, *root)
+	if err != nil {
+		return err
+	}
+
+	dryRun := globalDryRun || *localDryRun
+	if dryRun {
+		fmt.Println("DRY RUN MODE - No files will be modified")
+	}
+
+	result, err := manager.UpdateTags(ctx, addTagList, removeTagList, *root, filePaths, dryRun)
+	if err != nil {
+		return fmt.Errorf("failed to update tags: %w", err)
+	}
+
+	if *jsonOutput {
+		return json.NewEncoder(os.Stdout).Encode(result)
+	}
+
+	if len(result.FilesMigrated) > 0 {
+		fmt.Printf("Files with migrated hashtags: %d\n", len(result.FilesMigrated))
+		for _, file := range result.FilesMigrated {
+			fmt.Printf("  %s\n", file)
+		}
+	}
+
+	if len(result.ModifiedFiles) > 0 {
+		fmt.Printf("Modified files: %d\n", len(result.ModifiedFiles))
+		for _, file := range result.ModifiedFiles {
+			fmt.Printf("  %s\n", file)
+		}
+	}
+
+	if len(result.TagsAdded) > 0 {
+		fmt.Println("Tags added:")
+		for tag, count := range result.TagsAdded {
+			fmt.Printf("  %s: %d files\n", tag, count)
+		}
+	}
+
+	if len(result.TagsRemoved) > 0 {
+		fmt.Println("Tags removed:")
+		for tag, count := range result.TagsRemoved {
+			fmt.Printf("  %s: %d files\n", tag, count)
+		}
+	}
+
+	if len(result.Errors) > 0 {
+		fmt.Printf("Errors: %d\n", len(result.Errors))
+		for _, errMsg := range result.Errors {
+			fmt.Printf("  %s\n", errMsg)
+		}
+		return fmt.Errorf("completed with %d errors", len(result.Errors))
+	}
+
+	return nil
+}
+
+func ValidateUpdateParameters(addTags, removeTags, files string) error {
+	if addTags == "" && removeTags == "" {
+		return fmt.Errorf("at least one of --add or --remove must be specified")
+	}
+	if files == "" {
+		return fmt.Errorf("--files parameter is required")
+	}
+	return nil
+}
+
+func parseTagList(tagStr string) []string {
+	if tagStr == "" {
+		return nil
+	}
+	parts := strings.Split(tagStr, ",")
+	var tags []string
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
+func ParseFilePaths(filesStr, root string) ([]string, error) {
+	if filesStr == "" {
+		return nil, fmt.Errorf("files parameter cannot be empty")
+	}
+
+	parts := strings.Split(filesStr, ",")
+	var filePaths []string
+	for _, part := range parts {
+		path := strings.TrimSpace(part)
+		if path != "" {
+			if filepath.IsAbs(path) {
+				return nil, fmt.Errorf("file path must be relative to root: %s", path)
+			}
+			filePaths = append(filePaths, path)
+		}
+	}
+
+	if len(filePaths) == 0 {
+		return nil, fmt.Errorf("no valid file paths provided")
+	}
+
+	return filePaths, nil
 }

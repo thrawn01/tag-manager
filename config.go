@@ -19,12 +19,12 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		HashtagPattern:  `#[a-zA-Z][\w\-]*`,
-		YAMLTagPattern:  `(?m)^tags:\s*\[([^\]]+)\]`,
-		YAMLListPattern: `(?m)^tags:\s*$\n((?:\s+-\s+.+\n?)+)`,
 		ExcludeKeywords: []string{"bibr", "ftn", "issuecomment", "discussion", "diff-"},
+		YAMLListPattern: `(?m)^tags:\s*$\n((?:\s+-\s+.+\n?)+)`,
 		ExcludeDirs:     []string{"100 Archive", "Attachments", ".git"},
 		ExcludePatterns: []string{"*.excalidraw.md"},
+		YAMLTagPattern:  `(?m)^tags:\s*\[([^\]]+)\]`,
+		HashtagPattern:  `#[a-zA-Z][\w\-]*`,
 		MaxDigitRatio:   0.5,
 		MinTagLength:    3,
 	}

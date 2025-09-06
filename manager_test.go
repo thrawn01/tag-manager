@@ -7,10 +7,12 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	tagmanager "github.com/thrawn01/tag-manager"
 )
 
-func TestTagManagerE2E(t *testing.T) {
+func TestTagManagerE2e(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
@@ -18,21 +20,29 @@ func TestTagManagerE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testFiles := map[string]string{
-		"golang.md":     "# Go Tutorial\n#golang #programming #tutorial",
-		"python.md":     "# Python Guide\n#python #programming #data-science",
-		"javascript.md": "# JS Basics\n#javascript #web-development #programming",
-		"untagged.md":   "# No Tags\nThis file has no tags",
-		"mixed.md": `---
+	const (
+		golangContent     = "# Go Tutorial\n#golang #programming #tutorial"
+		pythonContent     = "# Python Guide\n#python #programming #data-science"
+		javascriptContent = "# JS Basics\n#javascript #web-development #programming"
+		untaggedContent   = "# No Tags\nThis file has no tags"
+		mixedContent      = `---
 tags: ["yaml-tag", "frontend"]
 ---
 # Mixed Tags
-Also has #hashtag-tag in content.`,
+Also has #hashtag-tag in content.`
+	)
+
+	testFiles := map[string]string{
+		"golang.md":     golangContent,
+		"python.md":     pythonContent,
+		"javascript.md": javascriptContent,
+		"untagged.md":   untaggedContent,
+		"mixed.md":      mixedContent,
 	}
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -156,7 +166,7 @@ Also has #hashtag-tag in content.`,
 	})
 }
 
-func TestTagManager_ContextCancellation(t *testing.T) {
+func TestTagManagerContextCancellation(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
 	if err != nil {
@@ -174,7 +184,7 @@ func TestTagManager_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestTagManager_NonAtomicOperations(t *testing.T) {
+func TestTagManagerNonAtomicOperations(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
@@ -190,7 +200,7 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -200,7 +210,7 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		_ = os.Chmod(readonlyPath, 0644)
+		_ = os.Chmod(readonlyPath, tagmanager.DefaultFilePermissions)
 	}()
 
 	replacements := []tagmanager.TagReplacement{
@@ -233,4 +243,461 @@ func TestTagManager_NonAtomicOperations(t *testing.T) {
 			t.Errorf("Expected modified file %s, got %s", expected, result.ModifiedFiles[i])
 		}
 	}
+}
+
+func TestUpdateTags(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	const testContent = `---
+title: "Test Document"
+tags: ["existing"]
+---
+# Test Content`
+
+	testFile := filepath.Join(tempDir, "test.md")
+	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{"existing"}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.ModifiedFiles, 1)
+	assert.Equal(t, 1, result.TagsAdded["new-tag"])
+	assert.Equal(t, 1, result.TagsRemoved["existing"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "tags:")
+	assert.Contains(t, contentStr, "- new-tag")
+	assert.NotContains(t, contentStr, "[\"")
+	assert.NotContains(t, contentStr, "existing")
+}
+
+func TestYAMLFrontMatterParsing(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		content string
+		addTags []string
+	}{
+		{
+			name: "No frontmatter",
+			content: `# Test Document
+Content here`,
+			addTags: []string{"new-tag"},
+		},
+		{
+			name: "Empty frontmatter",
+			content: `---
+---
+# Test Document`,
+			addTags: []string{"new-tag"},
+		},
+		{
+			name: "Existing tags",
+			content: `---
+tags: ["existing-tag"]
+---
+# Test Document`,
+			addTags: []string{"new-tag"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testFile := filepath.Join(tempDir, "test.md")
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
+
+			result, err := manager.UpdateTags(ctx, test.addTags, []string{}, tempDir, []string{"test.md"}, false)
+			require.NoError(t, err)
+
+			assert.Len(t, result.ModifiedFiles, 1)
+
+			modifiedContent, err := os.ReadFile(testFile)
+			require.NoError(t, err)
+
+			contentStr := string(modifiedContent)
+			assert.Contains(t, contentStr, "---\n")
+			assert.Contains(t, contentStr, "\n---\n")
+		})
+	}
+}
+
+func TestFrontMatterFieldPreservation(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	const testContent = `---
+title: "Important Title"
+author: "Test Author"
+date: "2024-01-01"
+tags: ["existing"]
+---
+# Test Content`
+
+	testFile := filepath.Join(tempDir, "test.md")
+	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.ModifiedFiles, 1)
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+
+	contentStr := string(modifiedContent)
+	assert.Contains(t, contentStr, "title: Important Title")
+	assert.Contains(t, contentStr, "author: Test Author")
+	assert.Contains(t, contentStr, "date: \"2024-01-01\"")
+}
+
+func TestTagConflictResolution(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+title: "Test Document"  
+tags: ["existing-tag"]
+---
+# Test Content`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		addTags     []string
+		removeTags  []string
+		expectError bool
+	}{
+		{
+			name:        "No conflicts",
+			addTags:     []string{"new-tag", "another-tag"},
+			removeTags:  []string{"old-tag", "obsolete"},
+			expectError: false,
+		},
+		{
+			name:        "Case insensitive conflicts resolved",
+			addTags:     []string{"Tag1", "tag2"},
+			removeTags:  []string{"TAG1", "existing-tag"},
+			expectError: false,
+		},
+		{
+			name:        "All tags conflict",
+			addTags:     []string{"same-tag", "another"},
+			removeTags:  []string{"same-tag", "another"},
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := manager.UpdateTags(ctx, test.addTags, test.removeTags, tempDir, []string{"test.md"}, true)
+
+			if test.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "no operations remain after conflict resolution")
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
+}
+
+func TestDuplicateTagHandling(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+title: "Test Document"
+tags: ["existing-tag", "another-tag"]
+---
+# Test Content`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{"existing-tag", "new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.ModifiedFiles, 1)
+	assert.Equal(t, 1, result.TagsAdded["new-tag"])
+	assert.Equal(t, 0, result.TagsAdded["existing-tag"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "- existing-tag")
+	assert.Contains(t, contentStr, "- another-tag")
+	assert.Contains(t, contentStr, "- new-tag")
+}
+
+func TestRemoveTagsFromBody(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+tags: ["frontmatter-tag"]
+---
+# Test Document
+
+This content has #body-tag and #another-body-tag in the text.
+Also #frontmatter-tag appears in body.`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{}, []string{"body-tag", "frontmatter-tag"}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.ModifiedFiles, 1)
+	assert.Equal(t, 1, result.TagsRemoved["frontmatter-tag"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.NotContains(t, contentStr, "#frontmatter-tag")
+	assert.NotContains(t, contentStr, "frontmatter-tag")
+	assert.Contains(t, contentStr, "#another-body-tag")
+}
+
+func TestTopOfFileDetection(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		content      string
+		expectedTags []string
+	}{
+		{
+			name: "Single line hashtags at top",
+			content: `#tag1 #tag2 #tag3
+# Document Title
+Content with #body-tag`,
+			expectedTags: []string{"tag1", "tag2", "tag3"},
+		},
+		{
+			name: "Multi-line hashtags at top",
+			content: `#tag1 #tag2
+#tag3 #tag4
+
+# Document Title
+Content with #body-tag`,
+			expectedTags: []string{"tag1", "tag2", "tag3", "tag4"},
+		},
+		{
+			name: "No top hashtags",
+			content: `# Document Title
+Content with #body-tag #another`,
+			expectedTags: []string{},
+		},
+		{
+			name: "Empty lines before hashtags",
+			content: `
+
+#tag1 #tag2
+# Document Title`,
+			expectedTags: []string{"tag1", "tag2"},
+		},
+		{
+			name: "Mixed content - stops at first non-hashtag",
+			content: `#tag1 #tag2
+Some text here
+#tag3 #tag4`,
+			expectedTags: []string{"tag1", "tag2"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testFile := filepath.Join(tempDir, "test.md")
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
+
+			ctx := context.Background()
+			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
+			require.NoError(t, err)
+
+			if len(test.expectedTags) > 0 {
+				assert.Len(t, result.FilesMigrated, 1)
+				for _, tag := range test.expectedTags {
+					assert.Equal(t, 1, result.TagsAdded[tag])
+				}
+			} else {
+				assert.Len(t, result.FilesMigrated, 0)
+			}
+		})
+	}
+}
+
+func TestHashtagMigration(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `#tag1 #tag2 #tag3
+
+# Document Title
+Content with #body-tag remains unchanged.`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.FilesMigrated, 1)
+	assert.Contains(t, result.FilesMigrated, "test.md")
+	assert.Equal(t, 1, result.TagsAdded["tag1"])
+	assert.Equal(t, 1, result.TagsAdded["tag2"])
+	assert.Equal(t, 1, result.TagsAdded["tag3"])
+	assert.Equal(t, 1, result.TagsAdded["new-tag"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "- tag1")
+	assert.Contains(t, contentStr, "- tag2")
+	assert.Contains(t, contentStr, "- tag3")
+	assert.Contains(t, contentStr, "- new-tag")
+	assert.NotContains(t, contentStr, "#tag1")
+	assert.NotContains(t, contentStr, "#tag2")
+	assert.NotContains(t, contentStr, "#tag3")
+	assert.Contains(t, contentStr, "#body-tag")
+	assert.Contains(t, contentStr, "# Document Title")
+}
+
+func TestMigrationBoundaryDetection(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		content         string
+		expectMigration bool
+		expectedTags    []string
+	}{
+		{
+			name: "Hashtags before title",
+			content: `#tag1 #tag2
+# Title`,
+			expectMigration: true,
+			expectedTags:    []string{"tag1", "tag2"},
+		},
+		{
+			name: "Hashtags with empty lines",
+			content: `#tag1
+
+# Title`,
+			expectMigration: true,
+			expectedTags:    []string{"tag1"},
+		},
+		{
+			name: "No boundary - all hashtags",
+			content: `#tag1 #tag2
+#tag3 #tag4`,
+			expectMigration: true,
+			expectedTags:    []string{"tag1", "tag2", "tag3", "tag4"},
+		},
+		{
+			name: "Immediate boundary",
+			content: `Document starts here
+#tag1 #tag2`,
+			expectMigration: false,
+			expectedTags:    []string{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testFile := filepath.Join(tempDir, "test.md")
+			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
+
+			ctx := context.Background()
+			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
+			require.NoError(t, err)
+
+			if test.expectMigration {
+				assert.Len(t, result.FilesMigrated, 1)
+				for _, tag := range test.expectedTags {
+					assert.Equal(t, 1, result.TagsAdded[tag])
+				}
+			} else {
+				assert.Len(t, result.FilesMigrated, 0)
+			}
+		})
+	}
+}
+
+func TestMigrationWithExistingFrontmatter(t *testing.T) {
+	tempDir := t.TempDir()
+	config := tagmanager.DefaultConfig()
+	manager, err := tagmanager.NewDefaultTagManager(config)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(tempDir, "test.md")
+	content := `---
+title: "Document"
+tags: ["existing"]
+---
+#migrated1 #migrated2
+
+# Content
+Body with #body-tag`
+
+	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
+
+	ctx := context.Background()
+	result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, false)
+	require.NoError(t, err)
+
+	assert.Len(t, result.FilesMigrated, 1)
+	assert.Equal(t, 1, result.TagsAdded["migrated1"])
+	assert.Equal(t, 1, result.TagsAdded["migrated2"])
+
+	modifiedContent, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	contentStr := string(modifiedContent)
+
+	assert.Contains(t, contentStr, "- existing")
+	assert.Contains(t, contentStr, "- migrated1")
+	assert.Contains(t, contentStr, "- migrated2")
+	assert.Contains(t, contentStr, "title: Document")
+	assert.NotContains(t, contentStr, "#migrated1")
+	assert.NotContains(t, contentStr, "#migrated2")
+	assert.Contains(t, contentStr, "#body-tag")
 }
