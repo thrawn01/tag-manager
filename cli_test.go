@@ -80,10 +80,10 @@ func TestCLIIntegration(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var stdoutBuf, stderrBuf bytes.Buffer
+			var stdout, stderr bytes.Buffer
 			err := tagmanager.RunCmd(test.args, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 			if test.expectError {
 				assert.Error(t, err)
@@ -92,7 +92,7 @@ func TestCLIIntegration(t *testing.T) {
 				// Validate that output was captured (not going to stdout/stderr directly)
 				if strings.Contains(strings.Join(test.args, " "), "--json") {
 					// For dry-run commands, we need to extract the JSON part
-					stdout := stdoutBuf.String()
+					stdout := stdout.String()
 					jsonOutput := stdout
 					if strings.Contains(stdout, "DRY RUN MODE") {
 						// Find the JSON part after the dry run message
@@ -112,7 +112,7 @@ func TestCLIIntegration(t *testing.T) {
 					assert.NoError(t, jsonErr)
 				}
 				// Stderr should be empty for successful commands
-				assert.Empty(t, stderrBuf.String())
+				assert.Empty(t, stderr.String())
 			}
 		})
 	}
@@ -140,17 +140,17 @@ func TestCLIGlobalFlags(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var stdoutBuf, stderrBuf bytes.Buffer
+			var stdout, stderr bytes.Buffer
 			err := tagmanager.RunCmd(test.args, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 			assert.NoError(t, err)
 
 			// Validate JSON output for commands that use --json
 			if strings.Contains(strings.Join(test.args, " "), "--json") {
 				// For dry-run commands, we need to extract the JSON part
-				stdout := stdoutBuf.String()
+				stdout := stdout.String()
 				jsonOutput := stdout
 				if strings.Contains(stdout, "DRY RUN MODE") {
 					// Find the JSON part after the dry run message
@@ -171,10 +171,10 @@ func TestCLIGlobalFlags(t *testing.T) {
 
 			// Validate dry-run output contains appropriate message
 			if strings.Contains(strings.Join(test.args, " "), "--dry-run") {
-				assertOutputContains(t, stdoutBuf.String(), []string{"DRY RUN MODE"})
+				assertOutputContains(t, stdout.String(), []string{"DRY RUN MODE"})
 			}
 
-			assert.Empty(t, stderrBuf.String())
+			assert.Empty(t, stderr.String())
 		})
 	}
 }
@@ -196,7 +196,10 @@ func TestMCPServerCapabilities(t *testing.T) {
 		}()
 
 		// Create MCP client and connect
-		session, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v1.0.0"}, nil).Connect(ctx, clientTransport, nil)
+		session, err := mcp.NewClient(&mcp.Implementation{
+			Name:    "test-client",
+			Version: "v1.0.0",
+		}, nil).Connect(ctx, clientTransport, nil)
 		require.NoError(t, err)
 		defer func() {
 			_ = session.Close()
@@ -352,7 +355,10 @@ Content here`
 	}()
 
 	// Create MCP client and connect
-	session, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v1.0.0"}, nil).Connect(ctx, clientTransport, nil)
+	session, err := mcp.NewClient(&mcp.Implementation{
+		Name:    "test-client",
+		Version: "v1.0.0",
+	}, nil).Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
 	defer func() {
 		_ = session.Close()
@@ -466,10 +472,10 @@ Content here`,
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var stdoutBuf, stderrBuf bytes.Buffer
+			var stdout, stderr bytes.Buffer
 			err := tagmanager.RunCmd(test.args, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 			if test.expectError {
 				assert.Error(t, err)
@@ -479,7 +485,7 @@ Content here`,
 				// Validate JSON output
 				if strings.Contains(strings.Join(test.args, " "), "--json") {
 					// For dry-run commands, we need to extract the JSON part
-					stdout := stdoutBuf.String()
+					stdout := stdout.String()
 					jsonOutput := stdout
 					if strings.Contains(stdout, "DRY RUN MODE") {
 						// Find the JSON part after the dry run message
@@ -500,10 +506,10 @@ Content here`,
 
 				// Validate dry-run output contains appropriate message
 				if strings.Contains(strings.Join(test.args, " "), "--dry-run") {
-					assertOutputContains(t, stdoutBuf.String(), []string{"DRY RUN MODE"})
+					assertOutputContains(t, stdout.String(), []string{"DRY RUN MODE"})
 				}
 
-				assert.Empty(t, stderrBuf.String())
+				assert.Empty(t, stderr.String())
 			}
 		})
 	}
@@ -625,13 +631,13 @@ func assertOutputContains(t *testing.T, output string, expected []string) {
 // assertJSONOutput verifies JSON output structure
 func assertJSONOutput(t *testing.T, args []string, validate func(t *testing.T, data interface{})) {
 	var data interface{}
-	var stdoutBuf, stderrBuf bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	err := tagmanager.RunCmd(args, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
-	err = json.Unmarshal(stdoutBuf.Bytes(), &data)
+	err = json.Unmarshal(stdout.Bytes(), &data)
 	require.NoError(t, err)
 	validate(t, data)
 }
@@ -643,30 +649,34 @@ func TestOutputCaptureUtilities(t *testing.T) {
 	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n#golang"), tagmanager.DefaultFilePermissions))
 
 	t.Run("CaptureOutput", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "list", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "list", "--root=" + tempDir, "--json",
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		assert.NotEmpty(t, stdoutBuf.String())
-		assert.Empty(t, stderrBuf.String())
+		assert.NotEmpty(t, stdout.String())
+		assert.Empty(t, stderr.String())
 
 		// Verify JSON output
 		var tags []interface{}
-		err = json.Unmarshal(stdoutBuf.Bytes(), &tags)
+		err = json.Unmarshal(stdout.Bytes(), &tags)
 		assert.NoError(t, err)
 	})
 
 	t.Run("CaptureJSONOutput", func(t *testing.T) {
 		var tags []tagmanager.TagInfo
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "list", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "list", "--root=" + tempDir, "--json",
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		err = json.Unmarshal(stdoutBuf.Bytes(), &tags)
+		err = json.Unmarshal(stdout.Bytes(), &tags)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, tags)
 
@@ -682,14 +692,16 @@ func TestOutputCaptureUtilities(t *testing.T) {
 	})
 
 	t.Run("AssertOutputContains", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "list", "--root=" + tempDir}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "list", "--root=" + tempDir,
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
 
-		assertOutputContains(t, stdoutBuf.String(), []string{"Found", "tags:", "golang"})
+		assertOutputContains(t, stdout.String(), []string{"Found", "tags:", "golang"})
 	})
 
 	t.Run("AssertJSONOutput", func(t *testing.T) {
@@ -708,33 +720,37 @@ func TestCommandOutputMessages(t *testing.T) {
 	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n#golang #python"), tagmanager.DefaultFilePermissions))
 
 	t.Run("ListCommandTextOutput", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "list", "--root=" + tempDir}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "list", "--root=" + tempDir,
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		assertOutputContains(t, stdoutBuf.String(), []string{"Found", "tags:", "golang", "python"})
+		assertOutputContains(t, stdout.String(), []string{"Found", "tags:", "golang", "python"})
 	})
 
 	t.Run("FindCommandTextOutput", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "find", "--tags=golang", "--root=" + tempDir}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "find", "--tags=golang", "--root=" + tempDir,
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		assertOutputContains(t, stdoutBuf.String(), []string{"#golang", "files", "test.md"})
+		assertOutputContains(t, stdout.String(), []string{"#golang", "files", "test.md"})
 	})
 
 	t.Run("HelpOutput", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
+		var stdout, stderr bytes.Buffer
 		err := tagmanager.RunCmd([]string{"tag-manager", "-h"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		assertOutputContains(t, stdoutBuf.String(), []string{"Obsidian Tag Manager", "Usage:", "Commands:", "Examples:"})
+		assertOutputContains(t, stdout.String(), []string{"Obsidian Tag Manager", "Usage:", "Commands:", "Examples:"})
 	})
 }
 
@@ -746,13 +762,15 @@ func TestJSONOutputStructure(t *testing.T) {
 
 	t.Run("ListCommandJSONStructure", func(t *testing.T) {
 		var tags []tagmanager.TagInfo
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "list", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "list", "--root=" + tempDir, "--json",
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		err = json.Unmarshal(stdoutBuf.Bytes(), &tags)
+		err = json.Unmarshal(stdout.Bytes(), &tags)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, tags)
 
@@ -766,13 +784,15 @@ func TestJSONOutputStructure(t *testing.T) {
 
 	t.Run("ValidateCommandJSONStructure", func(t *testing.T) {
 		var results map[string]tagmanager.ValidationResult
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "validate", "--tags=valid-tag,invalid!", "--json"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "validate", "--tags=valid-tag,invalid!", "--json",
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		err = json.Unmarshal(stdoutBuf.Bytes(), &results)
+		err = json.Unmarshal(stdout.Bytes(), &results)
 		assert.NoError(t, err)
 		assert.Contains(t, results, "valid-tag")
 		assert.Contains(t, results, "invalid!")
@@ -795,22 +815,26 @@ func TestDryRunOutputMessages(t *testing.T) {
 	require.NoError(t, os.WriteFile(testFile, []byte("# Test\n#golang"), tagmanager.DefaultFilePermissions))
 
 	t.Run("ReplaceCommandDryRun", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "replace", "--old=golang", "--new=go", "--root=" + tempDir, "--dry-run"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "replace", "--old=golang", "--new=go", "--root=" + tempDir, "--dry-run",
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		assertOutputContains(t, stdoutBuf.String(), []string{"DRY RUN MODE", "Modified files"})
+		assertOutputContains(t, stdout.String(), []string{"DRY RUN MODE", "Modified files"})
 	})
 
 	t.Run("UpdateCommandDryRun", func(t *testing.T) {
-		var stdoutBuf, stderrBuf bytes.Buffer
-		err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--files=test.md", "--root=" + tempDir, "--dry-run"}, &tagmanager.RunCmdOptions{
-			Stdout: &stdoutBuf,
-			Stderr: &stderrBuf,
+		var stdout, stderr bytes.Buffer
+		err := tagmanager.RunCmd([]string{
+			"tag-manager", "update", "--add=new-tag", "--files=test.md", "--root=" + tempDir, "--dry-run",
+		}, &tagmanager.RunCmdOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
 		})
 		assert.NoError(t, err)
-		assertOutputContains(t, stdoutBuf.String(), []string{"DRY RUN MODE"})
+		assertOutputContains(t, stdout.String(), []string{"DRY RUN MODE"})
 	})
 }

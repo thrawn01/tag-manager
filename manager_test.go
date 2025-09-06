@@ -204,15 +204,17 @@ tags: ["existing"]
 	testFile := filepath.Join(tempDir, "test.md")
 	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--remove=existing", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+	var stdout, stderr bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--remove=existing",
+		"--files=test.md", "--root=" + tempDir, "--json",
+	}, &tagmanager.RunCmdOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
 
 	var result tagmanager.TagUpdateResult
-	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+	err = json.Unmarshal(stdout.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -265,15 +267,17 @@ tags: ["existing-tag"]
 			testFile := filepath.Join(tempDir, "test.md")
 			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
-			var stdoutBuf, stderrBuf bytes.Buffer
-			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=" + test.addTags[0], "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+			var stdout, stderr bytes.Buffer
+			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=" + test.addTags[0],
+				"--files=test.md", "--root=" + tempDir, "--json",
+			}, &tagmanager.RunCmdOptions{
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 			require.NoError(t, err)
 
 			var result tagmanager.TagUpdateResult
-			err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+			err = json.Unmarshal(stdout.Bytes(), &result)
 			require.NoError(t, err)
 
 			assert.Len(t, result.ModifiedFiles, 1)
@@ -302,15 +306,17 @@ tags: ["existing"]
 	testFile := filepath.Join(tempDir, "test.md")
 	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+	var stdout, stderr bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--files=test.md",
+		"--root=" + tempDir, "--json",
+	}, &tagmanager.RunCmdOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
 
 	var result tagmanager.TagUpdateResult
-	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+	err = json.Unmarshal(stdout.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -364,7 +370,7 @@ tags: ["existing-tag"]
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var stdoutBuf, stderrBuf bytes.Buffer
+			var stdout, stderr bytes.Buffer
 			args := []string{"tag-manager", "update", "--files=test.md", "--root=" + tempDir, "--dry-run", "--json"}
 			if len(test.addTags) > 0 {
 				args = append(args, "--add="+strings.Join(test.addTags, ","))
@@ -373,8 +379,8 @@ tags: ["existing-tag"]
 				args = append(args, "--remove="+strings.Join(test.removeTags, ","))
 			}
 			err := tagmanager.RunCmd(args, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 
 			if test.expectError {
@@ -384,7 +390,7 @@ tags: ["existing-tag"]
 				require.NoError(t, err)
 
 				// Extract JSON from dry-run output
-				stdout := stdoutBuf.String()
+				stdout := stdout.String()
 				jsonOutput := stdout
 				if strings.Contains(stdout, "DRY RUN MODE") {
 					lines := strings.Split(stdout, "\n")
@@ -418,15 +424,17 @@ tags: ["existing-tag", "another-tag"]
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=existing-tag,new-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+	var stdout, stderr bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=existing-tag,new-tag", "--files=test.md",
+		"--root=" + tempDir, "--json",
+	}, &tagmanager.RunCmdOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
 
 	var result tagmanager.TagUpdateResult
-	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+	err = json.Unmarshal(stdout.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -456,15 +464,17 @@ Also #frontmatter-tag appears in body.`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--remove=body-tag,frontmatter-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+	var stdout, stderr bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--remove=body-tag,frontmatter-tag",
+		"--files=test.md", "--root=" + tempDir, "--json",
+	}, &tagmanager.RunCmdOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
 
 	var result tagmanager.TagUpdateResult
-	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+	err = json.Unmarshal(stdout.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -531,18 +541,19 @@ Some text here
 			testFile := filepath.Join(tempDir, "test.md")
 			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
-			var stdoutBuf, stderrBuf bytes.Buffer
-			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration", "--files=test.md", "--root=" + tempDir, "--dry-run", "--json"}, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+			var stdout, stderr bytes.Buffer
+			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration",
+				"--files=test.md", "--root=" + tempDir, "--dry-run", "--json",
+			}, &tagmanager.RunCmdOptions{
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 			require.NoError(t, err)
 
 			// Extract JSON from dry-run output
-			stdout := stdoutBuf.String()
-			jsonOutput := stdout
-			if strings.Contains(stdout, "DRY RUN MODE") {
-				lines := strings.Split(stdout, "\n")
+			jsonOutput := stdout.String()
+			if strings.Contains(stdout.String(), "DRY RUN MODE") {
+				lines := strings.Split(stdout.String(), "\n")
 				for _, line := range lines {
 					line = strings.TrimSpace(line)
 					if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
@@ -579,15 +590,17 @@ Content with #body-tag remains unchanged.`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+	var stdout, stderr bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag",
+		"--files=test.md", "--root=" + tempDir, "--json",
+	}, &tagmanager.RunCmdOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
 
 	var result tagmanager.TagUpdateResult
-	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+	err = json.Unmarshal(stdout.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.FilesMigrated, 1)
@@ -657,18 +670,19 @@ func TestMigrationBoundaryDetection(t *testing.T) {
 			testFile := filepath.Join(tempDir, "test.md")
 			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
-			var stdoutBuf, stderrBuf bytes.Buffer
-			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration", "--files=test.md", "--root=" + tempDir, "--dry-run", "--json"}, &tagmanager.RunCmdOptions{
-				Stdout: &stdoutBuf,
-				Stderr: &stderrBuf,
+			var stdout, stderr bytes.Buffer
+			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration",
+				"--files=test.md", "--root=" + tempDir, "--dry-run", "--json",
+			}, &tagmanager.RunCmdOptions{
+				Stdout: &stdout,
+				Stderr: &stderr,
 			})
 			require.NoError(t, err)
 
 			// Extract JSON from dry-run output
-			stdout := stdoutBuf.String()
-			jsonOutput := stdout
-			if strings.Contains(stdout, "DRY RUN MODE") {
-				lines := strings.Split(stdout, "\n")
+			jsonOutput := stdout.String()
+			if strings.Contains(stdout.String(), "DRY RUN MODE") {
+				lines := strings.Split(stdout.String(), "\n")
 				for _, line := range lines {
 					line = strings.TrimSpace(line)
 					if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
@@ -709,15 +723,18 @@ Body with #body-tag`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
-		Stdout: &stdoutBuf,
-		Stderr: &stderrBuf,
+	var stdout, stderr bytes.Buffer
+	err := tagmanager.RunCmd([]string{
+		"tag-manager", "update", "--add=trigger-migration",
+		"--files=test.md", "--root=" + tempDir, "--json",
+	}, &tagmanager.RunCmdOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
 	})
 	require.NoError(t, err)
 
 	var result tagmanager.TagUpdateResult
-	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
+	err = json.Unmarshal(stdout.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.FilesMigrated, 1)
