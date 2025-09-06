@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := tagmanager.RunCmd(os.Args); err != nil {
+	if err := tagmanager.RunCmd(os.Args, nil); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
