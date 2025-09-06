@@ -85,8 +85,6 @@ func TestCLIIntegration(t *testing.T) {
 				Stdout: &stdoutBuf,
 				Stderr: &stderrBuf,
 			})
-			stdout := stdoutBuf.String()
-			stderr := stderrBuf.String()
 			if test.expectError {
 				assert.Error(t, err)
 			} else {
@@ -94,6 +92,7 @@ func TestCLIIntegration(t *testing.T) {
 				// Validate that output was captured (not going to stdout/stderr directly)
 				if strings.Contains(strings.Join(test.args, " "), "--json") {
 					// For dry-run commands, we need to extract the JSON part
+					stdout := stdoutBuf.String()
 					jsonOutput := stdout
 					if strings.Contains(stdout, "DRY RUN MODE") {
 						// Find the JSON part after the dry run message
@@ -113,7 +112,7 @@ func TestCLIIntegration(t *testing.T) {
 					assert.NoError(t, jsonErr)
 				}
 				// Stderr should be empty for successful commands
-				assert.Empty(t, stderr)
+				assert.Empty(t, stderrBuf.String())
 			}
 		})
 	}
@@ -146,13 +145,12 @@ func TestCLIGlobalFlags(t *testing.T) {
 				Stdout: &stdoutBuf,
 				Stderr: &stderrBuf,
 			})
-			stdout := stdoutBuf.String()
-			stderr := stderrBuf.String()
 			assert.NoError(t, err)
 
 			// Validate JSON output for commands that use --json
 			if strings.Contains(strings.Join(test.args, " "), "--json") {
 				// For dry-run commands, we need to extract the JSON part
+				stdout := stdoutBuf.String()
 				jsonOutput := stdout
 				if strings.Contains(stdout, "DRY RUN MODE") {
 					// Find the JSON part after the dry run message
@@ -173,10 +171,10 @@ func TestCLIGlobalFlags(t *testing.T) {
 
 			// Validate dry-run output contains appropriate message
 			if strings.Contains(strings.Join(test.args, " "), "--dry-run") {
-				assertOutputContains(t, stdout, []string{"DRY RUN MODE"})
+				assertOutputContains(t, stdoutBuf.String(), []string{"DRY RUN MODE"})
 			}
 
-			assert.Empty(t, stderr)
+			assert.Empty(t, stderrBuf.String())
 		})
 	}
 }
@@ -473,8 +471,6 @@ Content here`,
 				Stdout: &stdoutBuf,
 				Stderr: &stderrBuf,
 			})
-			stdout := stdoutBuf.String()
-			stderr := stderrBuf.String()
 			if test.expectError {
 				assert.Error(t, err)
 			} else {
@@ -483,6 +479,7 @@ Content here`,
 				// Validate JSON output
 				if strings.Contains(strings.Join(test.args, " "), "--json") {
 					// For dry-run commands, we need to extract the JSON part
+					stdout := stdoutBuf.String()
 					jsonOutput := stdout
 					if strings.Contains(stdout, "DRY RUN MODE") {
 						// Find the JSON part after the dry run message
@@ -503,10 +500,10 @@ Content here`,
 
 				// Validate dry-run output contains appropriate message
 				if strings.Contains(strings.Join(test.args, " "), "--dry-run") {
-					assertOutputContains(t, stdout, []string{"DRY RUN MODE"})
+					assertOutputContains(t, stdoutBuf.String(), []string{"DRY RUN MODE"})
 				}
 
-				assert.Empty(t, stderr)
+				assert.Empty(t, stderrBuf.String())
 			}
 		})
 	}
