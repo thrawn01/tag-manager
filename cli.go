@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,15 +17,26 @@ import (
 type RunCmdOptions struct {
 	// MCPTransport allows providing a custom transport for MCP server (used for testing)
 	MCPTransport *mcp.InMemoryTransport
+	// Stdout writer for normal output (defaults to os.Stdout)
+	Stdout io.Writer
+	// Stderr writer for error output (defaults to os.Stderr)
+	Stderr io.Writer
 }
 
-func RunCmd(args []string) error {
-	return RunCmdWithOptions(args, nil)
+// commandContext holds runtime context for command execution
+type commandContext struct {
+	stdout  io.Writer
+	stderr  io.Writer
+	manager TagManager
 }
 
-func RunCmdWithOptions(args []string, options *RunCmdOptions) error {
+func RunCmd(args []string, options *RunCmdOptions) error {
 	if len(args) < 1 {
-		return ShowHelp()
+		stdout := io.Writer(os.Stdout)
+		if options != nil && options.Stdout != nil {
+			stdout = options.Stdout
+		}
+		return ShowHelp(stdout)
 	}
 
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
@@ -44,7 +56,11 @@ func RunCmdWithOptions(args []string, options *RunCmdOptions) error {
 	}
 
 	if *help {
-		return ShowHelp()
+		stdout := io.Writer(os.Stdout)
+		if options != nil && options.Stdout != nil {
+			stdout = options.Stdout
+		}
+		return ShowHelp(stdout)
 	}
 
 	if *mcpOption {
@@ -57,7 +73,11 @@ func RunCmdWithOptions(args []string, options *RunCmdOptions) error {
 
 	remaining := fs.Args()
 	if len(remaining) == 0 {
-		return ShowHelp()
+		stdout := io.Writer(os.Stdout)
+		if options != nil && options.Stdout != nil {
+			stdout = options.Stdout
+		}
+		return ShowHelp(stdout)
 	}
 
 	config, err := LoadConfig(*configFile)
@@ -65,35 +85,51 @@ func RunCmdWithOptions(args []string, options *RunCmdOptions) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Initialize command context with writers
+	cmdCtx := &commandContext{
+		stdout: io.Writer(os.Stdout),
+		stderr: io.Writer(os.Stderr),
+	}
+
+	if options != nil {
+		if options.Stdout != nil {
+			cmdCtx.stdout = options.Stdout
+		}
+		if options.Stderr != nil {
+			cmdCtx.stderr = options.Stderr
+		}
+	}
+
 	ctx := context.Background()
 	manager, err := NewDefaultTagManager(config)
 	if err != nil {
 		return fmt.Errorf("failed to create tag manager: %w", err)
 	}
+	cmdCtx.manager = manager
 
 	switch remaining[0] {
 	case "find":
-		return findFilesCommand(ctx, manager, remaining[1:], *verbose)
+		return findFilesCommand(ctx, cmdCtx, remaining[1:], *verbose)
 	case "info":
-		return getTagInfoCommand(ctx, manager, remaining[1:], *verbose)
+		return getTagInfoCommand(ctx, cmdCtx, remaining[1:], *verbose)
 	case "list":
-		return listTagsCommand(ctx, manager, remaining[1:], *verbose)
+		return listTagsCommand(ctx, cmdCtx, remaining[1:], *verbose)
 	case "replace":
-		return replaceTagCommand(ctx, manager, remaining[1:], *dryRun, *verbose)
+		return replaceTagCommand(ctx, cmdCtx, remaining[1:], *dryRun, *verbose)
 	case "update":
-		return updateCommand(ctx, manager, remaining[1:], *dryRun, *verbose)
+		return updateCommand(ctx, cmdCtx, remaining[1:], *dryRun, *verbose)
 	case "untagged":
-		return untaggedFilesCommand(ctx, manager, remaining[1:], *verbose)
+		return untaggedFilesCommand(ctx, cmdCtx, remaining[1:], *verbose)
 	case "validate":
-		return validateTagsCommand(ctx, manager, remaining[1:], *verbose)
+		return validateTagsCommand(ctx, cmdCtx, remaining[1:], *verbose)
 	case "file-tags":
-		return getFileTagsCommand(ctx, manager, remaining[1:], *verbose)
+		return getFileTagsCommand(ctx, cmdCtx, remaining[1:], *verbose)
 	default:
 		return fmt.Errorf("unknown command: %s", remaining[0])
 	}
 }
 
-func ShowHelp() error {
+func ShowHelp(w io.Writer) error {
 	help := `Obsidian Tag Manager - Manage tags in Obsidian vaults
 
 Usage:
@@ -129,11 +165,11 @@ Examples:
 
 For more information, visit: https://github.com/thrawn01/tag-manager
 `
-	fmt.Print(help)
+	_, _ = fmt.Fprint(w, help)
 	return nil
 }
 
-func findFilesCommand(ctx context.Context, manager TagManager, args []string, verbose bool) error {
+func findFilesCommand(ctx context.Context, cmdCtx *commandContext, args []string, verbose bool) error {
 	fs := flag.NewFlagSet("find", flag.ContinueOnError)
 
 	cwd, err := os.Getwd()
@@ -161,7 +197,7 @@ func findFilesCommand(ctx context.Context, manager TagManager, args []string, ve
 		tagList[i] = strings.TrimSpace(tagList[i])
 	}
 
-	results, err := manager.FindFilesByTags(ctx, tagList, *root)
+	results, err := cmdCtx.manager.FindFilesByTags(ctx, tagList, *root)
 	if err != nil {
 		return err
 	}
@@ -174,20 +210,20 @@ func findFilesCommand(ctx context.Context, manager TagManager, args []string, ve
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(results)
+		return json.NewEncoder(cmdCtx.stdout).Encode(results)
 	}
 
 	for tag, files := range results {
-		fmt.Printf("\n#%s (%d files):\n", tag, len(files))
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "\n#%s (%d files):\n", tag, len(files))
 		for _, file := range files {
-			fmt.Printf("  %s\n", file)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s\n", file)
 		}
 	}
 
 	return nil
 }
 
-func getTagInfoCommand(ctx context.Context, manager TagManager, args []string, verbose bool) error {
+func getTagInfoCommand(ctx context.Context, cmdCtx *commandContext, args []string, verbose bool) error {
 	fs := flag.NewFlagSet("info", flag.ContinueOnError)
 
 	cwd, err := os.Getwd()
@@ -212,22 +248,22 @@ func getTagInfoCommand(ctx context.Context, manager TagManager, args []string, v
 		tagList[i] = strings.TrimSpace(tagList[i])
 	}
 
-	infos, err := manager.GetTagsInfo(ctx, tagList, *root)
+	infos, err := cmdCtx.manager.GetTagsInfo(ctx, tagList, *root)
 	if err != nil {
 		return err
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(infos)
+		return json.NewEncoder(cmdCtx.stdout).Encode(infos)
 	}
 
 	for _, info := range infos {
-		fmt.Printf("\n#%s:\n", info.Name)
-		fmt.Printf("  Count: %d\n", info.Count)
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "\n#%s:\n", info.Name)
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "  Count: %d\n", info.Count)
 		if verbose {
-			fmt.Printf("  Files:\n")
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  Files:\n")
 			for _, file := range info.Files {
-				fmt.Printf("    %s\n", file)
+				_, _ = fmt.Fprintf(cmdCtx.stdout, "    %s\n", file)
 			}
 		}
 	}
@@ -235,7 +271,7 @@ func getTagInfoCommand(ctx context.Context, manager TagManager, args []string, v
 	return nil
 }
 
-func listTagsCommand(ctx context.Context, manager TagManager, args []string, verbose bool) error {
+func listTagsCommand(ctx context.Context, cmdCtx *commandContext, args []string, verbose bool) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 
 	cwd, err := os.Getwd()
@@ -252,7 +288,7 @@ func listTagsCommand(ctx context.Context, manager TagManager, args []string, ver
 		return err
 	}
 
-	tags, err := manager.ListAllTags(ctx, *root, *minCount)
+	tags, err := cmdCtx.manager.ListAllTags(ctx, *root, *minCount)
 	if err != nil {
 		return err
 	}
@@ -269,18 +305,18 @@ func listTagsCommand(ctx context.Context, manager TagManager, args []string, ver
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(tags)
+		return json.NewEncoder(cmdCtx.stdout).Encode(tags)
 	}
 
-	fmt.Printf("\nFound %d tags:\n", len(tags))
+	_, _ = fmt.Fprintf(cmdCtx.stdout, "\nFound %d tags:\n", len(tags))
 	for _, tag := range tags {
-		fmt.Printf("  #%-30s %d files\n", tag.Name, tag.Count)
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "  #%-30s %d files\n", tag.Name, tag.Count)
 	}
 
 	return nil
 }
 
-func replaceTagCommand(ctx context.Context, manager TagManager, args []string, globalDryRun bool, verbose bool) error {
+func replaceTagCommand(ctx context.Context, cmdCtx *commandContext, args []string, globalDryRun bool, verbose bool) error {
 	fs := flag.NewFlagSet("replace", flag.ContinueOnError)
 
 	cwd, err := os.Getwd()
@@ -324,36 +360,36 @@ func replaceTagCommand(ctx context.Context, manager TagManager, args []string, g
 
 	dryRun := globalDryRun || *localDryRun
 	if dryRun {
-		fmt.Println("DRY RUN MODE - No files will be modified")
+		_, _ = fmt.Fprintln(cmdCtx.stdout, "DRY RUN MODE - No files will be modified")
 	}
 
-	result, err := manager.ReplaceTagsBatch(ctx, replaceList, *root, dryRun)
+	result, err := cmdCtx.manager.ReplaceTagsBatch(ctx, replaceList, *root, dryRun)
 	if err != nil {
 		return err
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(result)
+		return json.NewEncoder(cmdCtx.stdout).Encode(result)
 	}
 
-	fmt.Printf("\nModified files: %d\n", len(result.ModifiedFiles))
+	_, _ = fmt.Fprintf(cmdCtx.stdout, "\nModified files: %d\n", len(result.ModifiedFiles))
 	if verbose {
 		for _, file := range result.ModifiedFiles {
-			fmt.Printf("  %s\n", file)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s\n", file)
 		}
 	}
 
 	if len(result.FailedFiles) > 0 {
-		fmt.Printf("\nFailed files: %d\n", len(result.FailedFiles))
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "\nFailed files: %d\n", len(result.FailedFiles))
 		for i, file := range result.FailedFiles {
-			fmt.Printf("  %s: %s\n", file, result.Errors[i])
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s: %s\n", file, result.Errors[i])
 		}
 	}
 
 	return nil
 }
 
-func untaggedFilesCommand(ctx context.Context, manager TagManager, args []string, verbose bool) error {
+func untaggedFilesCommand(ctx context.Context, cmdCtx *commandContext, args []string, verbose bool) error {
 	fs := flag.NewFlagSet("untagged", flag.ContinueOnError)
 
 	cwd, err := os.Getwd()
@@ -368,24 +404,24 @@ func untaggedFilesCommand(ctx context.Context, manager TagManager, args []string
 		return err
 	}
 
-	files, err := manager.GetUntaggedFiles(ctx, *root)
+	files, err := cmdCtx.manager.GetUntaggedFiles(ctx, *root)
 	if err != nil {
 		return err
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(files)
+		return json.NewEncoder(cmdCtx.stdout).Encode(files)
 	}
 
-	fmt.Printf("\nFound %d untagged files:\n", len(files))
+	_, _ = fmt.Fprintf(cmdCtx.stdout, "\nFound %d untagged files:\n", len(files))
 	for _, file := range files {
-		fmt.Printf("  %s\n", file.Path)
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s\n", file.Path)
 	}
 
 	return nil
 }
 
-func validateTagsCommand(ctx context.Context, manager TagManager, args []string, verbose bool) error {
+func validateTagsCommand(ctx context.Context, cmdCtx *commandContext, args []string, verbose bool) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	tags := fs.String("tags", "", "Comma-separated list of tags to validate")
 	jsonOutput := fs.Bool("json", false, "Output as JSON")
@@ -403,22 +439,22 @@ func validateTagsCommand(ctx context.Context, manager TagManager, args []string,
 		tagList[i] = strings.TrimSpace(tagList[i])
 	}
 
-	results := manager.ValidateTags(ctx, tagList)
+	results := cmdCtx.manager.ValidateTags(ctx, tagList)
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(results)
+		return json.NewEncoder(cmdCtx.stdout).Encode(results)
 	}
 
 	for tag, result := range results {
 		if result.IsValid {
-			fmt.Printf("\n✓ %s: VALID\n", tag)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "\n✓ %s: VALID\n", tag)
 		} else {
-			fmt.Printf("\n✗ %s: INVALID\n", tag)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "\n✗ %s: INVALID\n", tag)
 			for _, issue := range result.Issues {
-				fmt.Printf("  Issue: %s\n", issue)
+				_, _ = fmt.Fprintf(cmdCtx.stdout, "  Issue: %s\n", issue)
 			}
 			for _, suggestion := range result.Suggestions {
-				fmt.Printf("  → %s\n", suggestion)
+				_, _ = fmt.Fprintf(cmdCtx.stdout, "  → %s\n", suggestion)
 			}
 		}
 	}
@@ -426,7 +462,7 @@ func validateTagsCommand(ctx context.Context, manager TagManager, args []string,
 	return nil
 }
 
-func getFileTagsCommand(ctx context.Context, manager TagManager, args []string, verbose bool) error {
+func getFileTagsCommand(ctx context.Context, cmdCtx *commandContext, args []string, verbose bool) error {
 	fs := flag.NewFlagSet("file-tags", flag.ContinueOnError)
 	files := fs.String("files", "", "Comma-separated list of file paths")
 	jsonOutput := fs.Bool("json", false, "Output as JSON")
@@ -444,22 +480,22 @@ func getFileTagsCommand(ctx context.Context, manager TagManager, args []string, 
 		fileList[i] = strings.TrimSpace(fileList[i])
 	}
 
-	fileTags, err := manager.GetFilesTags(ctx, fileList)
+	fileTags, err := cmdCtx.manager.GetFilesTags(ctx, fileList)
 	if err != nil {
 		return err
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(fileTags)
+		return json.NewEncoder(cmdCtx.stdout).Encode(fileTags)
 	}
 
 	for _, file := range fileTags {
-		fmt.Printf("\n%s:\n", file.Path)
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "\n%s:\n", file.Path)
 		if len(file.Tags) == 0 {
-			fmt.Printf("  (no tags)\n")
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  (no tags)\n")
 		} else {
 			for _, tag := range file.Tags {
-				fmt.Printf("  #%s\n", tag)
+				_, _ = fmt.Fprintf(cmdCtx.stdout, "  #%s\n", tag)
 			}
 		}
 	}
@@ -467,7 +503,7 @@ func getFileTagsCommand(ctx context.Context, manager TagManager, args []string, 
 	return nil
 }
 
-func updateCommand(ctx context.Context, manager TagManager, args []string, globalDryRun bool, verbose bool) error {
+func updateCommand(ctx context.Context, cmdCtx *commandContext, args []string, globalDryRun bool, verbose bool) error {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 
 	cwd, err := os.Getwd()
@@ -499,50 +535,50 @@ func updateCommand(ctx context.Context, manager TagManager, args []string, globa
 
 	dryRun := globalDryRun || *localDryRun
 	if dryRun {
-		fmt.Println("DRY RUN MODE - No files will be modified")
+		_, _ = fmt.Fprintln(cmdCtx.stdout, "DRY RUN MODE - No files will be modified")
 	}
 
-	result, err := manager.UpdateTags(ctx, addTagList, removeTagList, *root, filePaths, dryRun)
+	result, err := cmdCtx.manager.UpdateTags(ctx, addTagList, removeTagList, *root, filePaths, dryRun)
 	if err != nil {
 		return fmt.Errorf("failed to update tags: %w", err)
 	}
 
 	if *jsonOutput {
-		return json.NewEncoder(os.Stdout).Encode(result)
+		return json.NewEncoder(cmdCtx.stdout).Encode(result)
 	}
 
 	if len(result.FilesMigrated) > 0 {
-		fmt.Printf("Files with migrated hashtags: %d\n", len(result.FilesMigrated))
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "Files with migrated hashtags: %d\n", len(result.FilesMigrated))
 		for _, file := range result.FilesMigrated {
-			fmt.Printf("  %s\n", file)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s\n", file)
 		}
 	}
 
 	if len(result.ModifiedFiles) > 0 {
-		fmt.Printf("Modified files: %d\n", len(result.ModifiedFiles))
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "Modified files: %d\n", len(result.ModifiedFiles))
 		for _, file := range result.ModifiedFiles {
-			fmt.Printf("  %s\n", file)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s\n", file)
 		}
 	}
 
 	if len(result.TagsAdded) > 0 {
-		fmt.Println("Tags added:")
+		_, _ = fmt.Fprintln(cmdCtx.stdout, "Tags added:")
 		for tag, count := range result.TagsAdded {
-			fmt.Printf("  %s: %d files\n", tag, count)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s: %d files\n", tag, count)
 		}
 	}
 
 	if len(result.TagsRemoved) > 0 {
-		fmt.Println("Tags removed:")
+		_, _ = fmt.Fprintln(cmdCtx.stdout, "Tags removed:")
 		for tag, count := range result.TagsRemoved {
-			fmt.Printf("  %s: %d files\n", tag, count)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s: %d files\n", tag, count)
 		}
 	}
 
 	if len(result.Errors) > 0 {
-		fmt.Printf("Errors: %d\n", len(result.Errors))
+		_, _ = fmt.Fprintf(cmdCtx.stdout, "Errors: %d\n", len(result.Errors))
 		for _, errMsg := range result.Errors {
-			fmt.Printf("  %s\n", errMsg)
+			_, _ = fmt.Fprintf(cmdCtx.stdout, "  %s\n", errMsg)
 		}
 		return fmt.Errorf("completed with %d errors", len(result.Errors))
 	}

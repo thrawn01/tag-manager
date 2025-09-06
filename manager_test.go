@@ -1,10 +1,13 @@
 package tagmanager_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,9 +19,7 @@ func TestTagManagerE2e(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	const (
 		golangContent     = "# Go Tutorial\n#golang #programming #tutorial"
@@ -42,34 +43,24 @@ Also has #hashtag-tag in content.`
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions))
 	}
 
 	ctx := context.Background()
 
 	t.Run("FindFilesByTags", func(t *testing.T) {
 		results, err := manager.FindFilesByTags(ctx, []string{"programming"}, tempDir)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		files := results["programming"]
-		if len(files) != 3 {
-			t.Errorf("Expected 3 files with #programming tag, got %d", len(files))
-		}
+		assert.Len(t, files, 3)
 	})
 
 	t.Run("ListAllTags", func(t *testing.T) {
 		tags, err := manager.ListAllTags(ctx, tempDir, 1)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
-		if len(tags) < 5 {
-			t.Errorf("Expected at least 5 tags, got %d", len(tags))
-		}
+		assert.GreaterOrEqual(t, len(tags), 5)
 
 		programmingFound := false
 		for _, tag := range tags {
@@ -79,23 +70,17 @@ Also has #hashtag-tag in content.`
 			}
 		}
 
-		if !programmingFound {
-			t.Error("Expected programming tag with count 3")
-		}
+		assert.True(t, programmingFound, "Expected programming tag with count 3")
 	})
 
 	t.Run("GetUntaggedFiles", func(t *testing.T) {
 		untagged, err := manager.GetUntaggedFiles(ctx, tempDir)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
-		if len(untagged) != 1 {
-			t.Errorf("Expected 1 untagged file, got %d", len(untagged))
-		}
+		assert.Len(t, untagged, 1)
 
-		if len(untagged) > 0 && filepath.Base(untagged[0].Path) != "untagged.md" {
-			t.Error("Expected untagged.md to be in untagged files")
+		if len(untagged) > 0 {
+			assert.Equal(t, "untagged.md", filepath.Base(untagged[0].Path))
 		}
 	})
 
@@ -105,42 +90,26 @@ Also has #hashtag-tag in content.`
 		}
 
 		result, err := manager.ReplaceTagsBatch(ctx, replacements, tempDir, false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
-		if len(result.ModifiedFiles) != 3 {
-			t.Errorf("Expected 3 modified files, got %d", len(result.ModifiedFiles))
-		}
+		assert.Len(t, result.ModifiedFiles, 3)
 
-		if len(result.FailedFiles) > 0 {
-			t.Errorf("Expected no failed files, got %d: %v", len(result.FailedFiles), result.Errors)
-		}
+		assert.Empty(t, result.FailedFiles)
 
 		newResults, err := manager.FindFilesByTags(ctx, []string{"coding"}, tempDir)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
-		if len(newResults["coding"]) != 3 {
-			t.Errorf("Expected 3 files with #coding tag after replacement, got %d", len(newResults["coding"]))
-		}
+		assert.Len(t, newResults["coding"], 3)
 	})
 
 	t.Run("ValidateTags", func(t *testing.T) {
 		results := manager.ValidateTags(ctx, []string{"valid-tag", "invalid!", "abc"})
 
-		if !results["valid-tag"].IsValid {
-			t.Error("Expected valid-tag to be valid")
-		}
+		assert.True(t, results["valid-tag"].IsValid)
 
-		if results["invalid!"].IsValid {
-			t.Error("Expected invalid! to be invalid")
-		}
+		assert.False(t, results["invalid!"].IsValid)
 
-		if results["abc"].IsValid {
-			t.Error("Expected abc to be invalid (too short)")
-		}
+		assert.False(t, results["abc"].IsValid)
 	})
 
 	t.Run("GetFilesTags", func(t *testing.T) {
@@ -150,18 +119,12 @@ Also has #hashtag-tag in content.`
 		}
 
 		results, err := manager.GetFilesTags(ctx, filePaths)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
-		if len(results) != 2 {
-			t.Errorf("Expected 2 results, got %d", len(results))
-		}
+		assert.Len(t, results, 2)
 
 		for _, result := range results {
-			if len(result.Tags) == 0 {
-				t.Errorf("Expected tags for file %s", result.Path)
-			}
+			assert.NotEmpty(t, result.Tags)
 		}
 	})
 }
@@ -169,9 +132,7 @@ Also has #hashtag-tag in content.`
 func TestTagManagerContextCancellation(t *testing.T) {
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Create a context that cancels immediately
 	ctx, cancel := context.WithCancel(context.Background())
@@ -188,9 +149,7 @@ func TestTagManagerNonAtomicOperations(t *testing.T) {
 	tempDir := t.TempDir()
 	config := tagmanager.DefaultConfig()
 	manager, err := tagmanager.NewDefaultTagManager(config)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	testFiles := map[string]string{
 		"success.md":  "#old-tag content",
@@ -200,15 +159,11 @@ func TestTagManagerNonAtomicOperations(t *testing.T) {
 
 	for path, content := range testFiles {
 		fullPath := filepath.Join(tempDir, path)
-		if err := os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), tagmanager.DefaultFilePermissions))
 	}
 
 	readonlyPath := filepath.Join(tempDir, "readonly.md")
-	if err := os.Chmod(readonlyPath, 0444); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chmod(readonlyPath, 0444))
 	defer func() {
 		_ = os.Chmod(readonlyPath, tagmanager.DefaultFilePermissions)
 	}()
@@ -219,17 +174,11 @@ func TestTagManagerNonAtomicOperations(t *testing.T) {
 
 	ctx := context.Background()
 	result, err := manager.ReplaceTagsBatch(ctx, replacements, tempDir, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if len(result.ModifiedFiles) != 2 {
-		t.Errorf("Expected 2 modified files (excluding readonly), got %d", len(result.ModifiedFiles))
-	}
+	assert.Len(t, result.ModifiedFiles, 2)
 
-	if len(result.FailedFiles) != 1 {
-		t.Errorf("Expected 1 failed file (readonly), got %d", len(result.FailedFiles))
-	}
+	assert.Len(t, result.FailedFiles, 1)
 
 	sort.Strings(result.ModifiedFiles)
 	expectedModified := []string{
@@ -239,17 +188,12 @@ func TestTagManagerNonAtomicOperations(t *testing.T) {
 	sort.Strings(expectedModified)
 
 	for i, expected := range expectedModified {
-		if result.ModifiedFiles[i] != expected {
-			t.Errorf("Expected modified file %s, got %s", expected, result.ModifiedFiles[i])
-		}
+		assert.Equal(t, expected, result.ModifiedFiles[i])
 	}
 }
 
 func TestUpdateTags(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	const testContent = `---
 title: "Test Document"
@@ -260,8 +204,15 @@ tags: ["existing"]
 	testFile := filepath.Join(tempDir, "test.md")
 	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
 
-	ctx := context.Background()
-	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{"existing"}, tempDir, []string{"test.md"}, false)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--remove=existing", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+	})
+	require.NoError(t, err)
+
+	var result tagmanager.TagUpdateResult
+	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -280,11 +231,6 @@ tags: ["existing"]
 
 func TestYAMLFrontMatterParsing(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
-
-	ctx := context.Background()
 
 	tests := []struct {
 		name    string
@@ -319,7 +265,15 @@ tags: ["existing-tag"]
 			testFile := filepath.Join(tempDir, "test.md")
 			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
-			result, err := manager.UpdateTags(ctx, test.addTags, []string{}, tempDir, []string{"test.md"}, false)
+			var stdoutBuf, stderrBuf bytes.Buffer
+			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=" + test.addTags[0], "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+				Stdout: &stdoutBuf,
+				Stderr: &stderrBuf,
+			})
+			require.NoError(t, err)
+
+			var result tagmanager.TagUpdateResult
+			err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 			require.NoError(t, err)
 
 			assert.Len(t, result.ModifiedFiles, 1)
@@ -336,9 +290,6 @@ tags: ["existing-tag"]
 
 func TestFrontMatterFieldPreservation(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	const testContent = `---
 title: "Important Title"
@@ -351,8 +302,15 @@ tags: ["existing"]
 	testFile := filepath.Join(tempDir, "test.md")
 	require.NoError(t, os.WriteFile(testFile, []byte(testContent), tagmanager.DefaultFilePermissions))
 
-	ctx := context.Background()
-	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+	})
+	require.NoError(t, err)
+
+	var result tagmanager.TagUpdateResult
+	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -368,9 +326,6 @@ tags: ["existing"]
 
 func TestTagConflictResolution(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	testFile := filepath.Join(tempDir, "test.md")
 	content := `---
@@ -380,7 +335,6 @@ tags: ["existing-tag"]
 # Test Content`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
-	ctx := context.Background()
 
 	tests := []struct {
 		name        string
@@ -410,12 +364,41 @@ tags: ["existing-tag"]
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := manager.UpdateTags(ctx, test.addTags, test.removeTags, tempDir, []string{"test.md"}, true)
+			var stdoutBuf, stderrBuf bytes.Buffer
+			args := []string{"tag-manager", "update", "--files=test.md", "--root=" + tempDir, "--dry-run", "--json"}
+			if len(test.addTags) > 0 {
+				args = append(args, "--add="+strings.Join(test.addTags, ","))
+			}
+			if len(test.removeTags) > 0 {
+				args = append(args, "--remove="+strings.Join(test.removeTags, ","))
+			}
+			err := tagmanager.RunCmd(args, &tagmanager.RunCmdOptions{
+				Stdout: &stdoutBuf,
+				Stderr: &stderrBuf,
+			})
 
 			if test.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "no operations remain after conflict resolution")
+				require.ErrorContains(t, err, "no operations remain after conflict resolution")
 			} else {
+				require.NoError(t, err)
+
+				// Extract JSON from dry-run output
+				stdout := stdoutBuf.String()
+				jsonOutput := stdout
+				if strings.Contains(stdout, "DRY RUN MODE") {
+					lines := strings.Split(stdout, "\n")
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
+							jsonOutput = line
+							break
+						}
+					}
+				}
+
+				var result tagmanager.TagUpdateResult
+				err = json.Unmarshal([]byte(jsonOutput), &result)
 				require.NoError(t, err)
 				assert.NotNil(t, result)
 			}
@@ -425,9 +408,6 @@ tags: ["existing-tag"]
 
 func TestDuplicateTagHandling(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	testFile := filepath.Join(tempDir, "test.md")
 	content := `---
@@ -438,8 +418,15 @@ tags: ["existing-tag", "another-tag"]
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	ctx := context.Background()
-	result, err := manager.UpdateTags(ctx, []string{"existing-tag", "new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=existing-tag,new-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+	})
+	require.NoError(t, err)
+
+	var result tagmanager.TagUpdateResult
+	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -457,9 +444,6 @@ tags: ["existing-tag", "another-tag"]
 
 func TestRemoveTagsFromBody(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	testFile := filepath.Join(tempDir, "test.md")
 	content := `---
@@ -472,8 +456,15 @@ Also #frontmatter-tag appears in body.`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	ctx := context.Background()
-	result, err := manager.UpdateTags(ctx, []string{}, []string{"body-tag", "frontmatter-tag"}, tempDir, []string{"test.md"}, false)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--remove=body-tag,frontmatter-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+	})
+	require.NoError(t, err)
+
+	var result tagmanager.TagUpdateResult
+	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.ModifiedFiles, 1)
@@ -490,9 +481,6 @@ Also #frontmatter-tag appears in body.`
 
 func TestTopOfFileDetection(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	tests := []struct {
 		name         string
@@ -543,8 +531,29 @@ Some text here
 			testFile := filepath.Join(tempDir, "test.md")
 			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
-			ctx := context.Background()
-			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
+			var stdoutBuf, stderrBuf bytes.Buffer
+			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration", "--files=test.md", "--root=" + tempDir, "--dry-run", "--json"}, &tagmanager.RunCmdOptions{
+				Stdout: &stdoutBuf,
+				Stderr: &stderrBuf,
+			})
+			require.NoError(t, err)
+
+			// Extract JSON from dry-run output
+			stdout := stdoutBuf.String()
+			jsonOutput := stdout
+			if strings.Contains(stdout, "DRY RUN MODE") {
+				lines := strings.Split(stdout, "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
+						jsonOutput = line
+						break
+					}
+				}
+			}
+
+			var result tagmanager.TagUpdateResult
+			err = json.Unmarshal([]byte(jsonOutput), &result)
 			require.NoError(t, err)
 
 			if len(test.expectedTags) > 0 {
@@ -561,9 +570,6 @@ Some text here
 
 func TestHashtagMigration(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	testFile := filepath.Join(tempDir, "test.md")
 	content := `#tag1 #tag2 #tag3
@@ -573,8 +579,15 @@ Content with #body-tag remains unchanged.`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	ctx := context.Background()
-	result, err := manager.UpdateTags(ctx, []string{"new-tag"}, []string{}, tempDir, []string{"test.md"}, false)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=new-tag", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+	})
+	require.NoError(t, err)
+
+	var result tagmanager.TagUpdateResult
+	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.FilesMigrated, 1)
@@ -601,9 +614,6 @@ Content with #body-tag remains unchanged.`
 
 func TestMigrationBoundaryDetection(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	tests := []struct {
 		name            string
@@ -647,8 +657,29 @@ func TestMigrationBoundaryDetection(t *testing.T) {
 			testFile := filepath.Join(tempDir, "test.md")
 			require.NoError(t, os.WriteFile(testFile, []byte(test.content), tagmanager.DefaultFilePermissions))
 
-			ctx := context.Background()
-			result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, true)
+			var stdoutBuf, stderrBuf bytes.Buffer
+			err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration", "--files=test.md", "--root=" + tempDir, "--dry-run", "--json"}, &tagmanager.RunCmdOptions{
+				Stdout: &stdoutBuf,
+				Stderr: &stderrBuf,
+			})
+			require.NoError(t, err)
+
+			// Extract JSON from dry-run output
+			stdout := stdoutBuf.String()
+			jsonOutput := stdout
+			if strings.Contains(stdout, "DRY RUN MODE") {
+				lines := strings.Split(stdout, "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
+						jsonOutput = line
+						break
+					}
+				}
+			}
+
+			var result tagmanager.TagUpdateResult
+			err = json.Unmarshal([]byte(jsonOutput), &result)
 			require.NoError(t, err)
 
 			if test.expectMigration {
@@ -665,9 +696,6 @@ func TestMigrationBoundaryDetection(t *testing.T) {
 
 func TestMigrationWithExistingFrontmatter(t *testing.T) {
 	tempDir := t.TempDir()
-	config := tagmanager.DefaultConfig()
-	manager, err := tagmanager.NewDefaultTagManager(config)
-	require.NoError(t, err)
 
 	testFile := filepath.Join(tempDir, "test.md")
 	content := `---
@@ -681,8 +709,15 @@ Body with #body-tag`
 
 	require.NoError(t, os.WriteFile(testFile, []byte(content), tagmanager.DefaultFilePermissions))
 
-	ctx := context.Background()
-	result, err := manager.UpdateTags(ctx, []string{}, []string{}, tempDir, []string{"test.md"}, false)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := tagmanager.RunCmd([]string{"tag-manager", "update", "--add=trigger-migration", "--files=test.md", "--root=" + tempDir, "--json"}, &tagmanager.RunCmdOptions{
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+	})
+	require.NoError(t, err)
+
+	var result tagmanager.TagUpdateResult
+	err = json.Unmarshal(stdoutBuf.Bytes(), &result)
 	require.NoError(t, err)
 
 	assert.Len(t, result.FilesMigrated, 1)
